@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use std::time::Duration;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -57,8 +58,10 @@ impl SttDeepgram {
         // whatever transcript it has, instead of waiting for is_final.
         let (release_tx, mut release_rx) = tokio::sync::oneshot::channel::<()>();
 
-        // Task 1: pump audio chunks into WS. When audio_rx closes, fire
-        // the release signal, then close the WS in the background.
+        // Task 1: pump audio chunks into WS. When audio_rx closes, send
+        // Finalize so Deepgram commits any pending audio as an is_final
+        // event. Fire the release signal so the read loop enters its
+        // "wait for is_final" phase. Then send CloseStream + close.
         let _send_task = tokio::spawn(async move {
             while let Some(samples) = audio_rx.recv().await {
                 let mut bytes = Vec::with_capacity(samples.len() * 2);
@@ -69,11 +72,17 @@ impl SttDeepgram {
                     break;
                 }
             }
-            // Audio sender dropped. Signal release BEFORE doing any cleanup
-            // so the read loop returns ASAP.
+            // Audio EOS. Tell Deepgram to commit pending audio as is_final.
+            let _ = write
+                .send(Message::Text("{\"type\":\"Finalize\"}".to_string().into()))
+                .await;
+            // Signal the read loop to switch from live to "await is_final".
             let _ = release_tx.send(());
-            // Close the WS in the background — we don't wait for Deepgram's
-            // ack here because we've already returned from the parent fn.
+            // CRITICAL: do NOT send CloseStream or close the WS yet, or
+            // Deepgram will hang up before emitting the is_final event we
+            // just asked for via Finalize. Wait until the read loop has
+            // had time to receive the response, then clean up.
+            tokio::time::sleep(Duration::from_millis(1500)).await;
             let _ = write
                 .send(Message::Text(
                     "{\"type\":\"CloseStream\"}".to_string().into(),
@@ -83,46 +92,124 @@ impl SttDeepgram {
         });
 
         // Task 2: read transcripts. Track committed is_final segments
-        // separately from the latest interim guess. On release signal,
-        // return finalized + latest_interim immediately.
+        // separately from the latest interim guess.
+        //
+        // Phase 1 (recording): race release signal against incoming frames.
+        // Phase 2 (await final): after release, send_task issued a Finalize
+        // to Deepgram. Keep processing frames until we see an `is_final`
+        // covering the tail audio, OR until POST_RELEASE_TIMEOUT_MS as a
+        // safety net.
         let mut finalized = String::new();
         let mut latest_interim = String::new();
 
+        // Phase 1: live forwarding.
         loop {
             tokio::select! {
                 biased;
-                _ = &mut release_rx => {
-                    return Ok(merge(finalized, latest_interim));
-                }
+                _ = &mut release_rx => break,
                 msg = read.next() => {
-                    let Some(Ok(Message::Text(text))) = msg else {
-                        break;
-                    };
-                    let Ok(event) = serde_json::from_str::<serde_json::Value>(&text) else {
-                        continue;
-                    };
-                    if event["type"] != "Results" {
-                        continue;
-                    }
-                    let Some(t) = event["channel"]["alternatives"][0]["transcript"].as_str() else {
-                        continue;
-                    };
-                    if event["is_final"].as_bool().unwrap_or(false) {
-                        if !t.is_empty() {
-                            if !finalized.is_empty() {
-                                finalized.push(' ');
-                            }
-                            finalized.push_str(t);
+                    match process_frame(msg, &mut finalized, &mut latest_interim) {
+                        FrameOutcome::Continue | FrameOutcome::GotFinal => {}
+                        FrameOutcome::WsClosed => {
+                            // WS died mid-stream — bail with what we have.
+                            let result = merge(finalized, latest_interim);
+                            eprintln!("[deepgram-debug] WS closed mid-stream, returning: {:?}", result);
+                            return Ok(result);
                         }
-                        latest_interim.clear();
-                    } else {
-                        latest_interim = t.to_string();
                     }
                 }
             }
         }
 
-        Ok(merge(finalized, latest_interim))
+        // Phase 2: wait for Deepgram's is_final event for the tail audio.
+        // send_task already issued the Finalize message; Deepgram should
+        // emit an is_final within ~100-300ms.
+        eprintln!(
+            "[deepgram-debug] released, awaiting is_final (timeout {}ms)...",
+            POST_RELEASE_TIMEOUT_MS
+        );
+        let timeout = tokio::time::sleep(Duration::from_millis(POST_RELEASE_TIMEOUT_MS));
+        tokio::pin!(timeout);
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut timeout => {
+                    eprintln!("[deepgram-debug] is_final timeout reached");
+                    break;
+                }
+                msg = read.next() => {
+                    match process_frame(msg, &mut finalized, &mut latest_interim) {
+                        FrameOutcome::GotFinal => {
+                            // Deepgram committed the tail — we have everything.
+                            break;
+                        }
+                        FrameOutcome::Continue => {}
+                        FrameOutcome::WsClosed => break,
+                    }
+                }
+            }
+        }
+
+        let result = merge(finalized, latest_interim);
+        eprintln!("[deepgram-debug] returning: {:?}", result);
+        Ok(result)
+    }
+}
+
+/// Max time to wait after release for Deepgram's is_final response.
+/// Deepgram normally answers within 100-300ms of the Finalize message.
+/// If something goes wrong (network blip, Deepgram delay), we still return
+/// after this timeout with whatever interim we have, so the user isn't
+/// stuck.
+const POST_RELEASE_TIMEOUT_MS: u64 = 800;
+
+/// What happened when we processed a frame.
+enum FrameOutcome {
+    /// Frame processed (interim or non-Results), keep looping.
+    Continue,
+    /// Frame was an is_final event — caller may want to stop waiting.
+    GotFinal,
+    /// The WS stream ended — caller must stop.
+    WsClosed,
+}
+
+/// Process one Deepgram WebSocket frame. Updates `finalized` and
+/// `latest_interim` in place, and reports what happened.
+fn process_frame(
+    msg: Option<Result<Message, tokio_tungstenite::tungstenite::Error>>,
+    finalized: &mut String,
+    latest_interim: &mut String,
+) -> FrameOutcome {
+    let Some(Ok(Message::Text(text))) = msg else {
+        return FrameOutcome::WsClosed;
+    };
+    let Ok(event) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return FrameOutcome::Continue;
+    };
+    if event["type"] != "Results" {
+        return FrameOutcome::Continue;
+    }
+    let Some(t) = event["channel"]["alternatives"][0]["transcript"].as_str() else {
+        return FrameOutcome::Continue;
+    };
+    let is_final = event["is_final"].as_bool().unwrap_or(false);
+    eprintln!(
+        "[deepgram-debug] {} → {:?}",
+        if is_final { "FINAL" } else { "interim" },
+        t
+    );
+    if is_final {
+        if !t.is_empty() {
+            if !finalized.is_empty() {
+                finalized.push(' ');
+            }
+            finalized.push_str(t);
+        }
+        latest_interim.clear();
+        FrameOutcome::GotFinal
+    } else {
+        *latest_interim = t.to_string();
+        FrameOutcome::Continue
     }
 }
 

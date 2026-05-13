@@ -1,83 +1,8 @@
-use crate::screenshot::{
-    capture_for_claude, pick_declared_resolution, resize_jpeg_for_computer_use,
-};
+use crate::screenshot::pick_declared_resolution;
 use futures_util::StreamExt;
 
 pub struct Claude {
     pub api_key: String,
-}
-
-impl Claude {
-    /// Streaming version of `complete`. Posts to Anthropic with `stream: true`,
-    /// parses the SSE response, and invokes `on_token` for each `text_delta`
-    /// chunk as it arrives. Returns the fully-accumulated text when the stream
-    /// completes.
-    ///
-    /// Designed to be called from a sync thread via `tokio::runtime::Runtime::block_on`,
-    /// or directly from an async context (e.g., inside a tokio task).
-    pub async fn complete_stream<F>(
-        &self,
-        prompt: &str,
-        mut on_token: F,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
-    where
-        F: FnMut(&str),
-    {
-        let body = serde_json::json!({
-            "model": "claude-haiku-4-5",
-            "max_tokens": 1024,
-            "stream": true,
-            "system": "You are aegis, a desktop voice assistant. Your responses will be spoken aloud. Respond conversationally in 1-2 sentences. Use only plain text — no markdown, no headers, no asterisks, no bullet points, no emojis. Write the way a person would speak.",
-            "messages": [
-                { "role": "user", "content": prompt }
-            ]
-        });
-
-        let response = reqwest::Client::new()
-            .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("Anthropic API error {}: {}", status, text).into());
-        }
-
-        let mut stream = response.bytes_stream();
-        let mut buffer = String::new();
-        let mut accumulated = String::new();
-
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            let s = std::str::from_utf8(&chunk)?;
-            buffer.push_str(s);
-
-            while let Some(idx) = buffer.find("\n\n") {
-                let frame: String = buffer.drain(..idx + 2).collect();
-                for line in frame.lines() {
-                    let Some(data) = line.strip_prefix("data: ") else {
-                        continue;
-                    };
-                    let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else {
-                        continue;
-                    };
-                    if event["type"] == "content_block_delta" {
-                        if let Some(text) = event["delta"]["text"].as_str() {
-                            accumulated.push_str(text);
-                            on_token(text);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(accumulated)
-    }
 }
 
 impl Claude {
@@ -115,22 +40,38 @@ impl Claude {
     where
         F: FnMut(i64, i64),
     {
+        // `image_b64` is expected to be PRE-RESIZED to one of the Computer Use
+        // declared resolutions. We re-derive (declared_w, declared_h) from the
+        // window dimensions so the coord-scaling math stays consistent.
         let (declared_w, declared_h) = pick_declared_resolution(window_width, window_height);
-        let resized = resize_jpeg_for_computer_use(image_b64, declared_w, declared_h)
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-                e.to_string().into()
-            })?;
+        eprintln!(
+            "[timing-claude:find_point] image size ({} KB b64)",
+            image_b64.len() / 1024
+        );
 
         let user_prompt = format!(
-            "User asks: \"{}\". Look at the screenshot and find the UI element they're asking about. \
-             Invoke the computer tool to left_click on its center. Do not say anything — just call the tool.",
+            "The user said: \"{}\". Find the most relevant UI element on screen — \
+             button, link, menu item, sidebar entry, anything visible they could be referring to. \
+             ALWAYS invoke the computer tool with a left_click on the center of that element. \
+             Even if the user phrased it as a question (like 'where is X'), interpret it as a \
+             request to point at X. The user wants to SEE where it is, not just hear about it. \
+             Do not output text — only call the tool.",
             prompt
         );
 
         let body = serde_json::json!({
             "model": "claude-haiku-4-5",
-            "max_tokens": 100,
+            // 500 gives ample headroom for any preamble Claude might emit
+            // before the tool call. Empirically the model uses ~60 tokens
+            // on "I'll click on..." text before the actual tool block.
+            "max_tokens": 500,
             "stream": true,
+            "system": "You are a UI coordinate finder. You take exactly ONE action: \
+                       invoke the computer tool with a left_click on the center of the \
+                       UI element the user is referring to. Do NOT explain. Do NOT \
+                       describe what you see. Do NOT say what you're about to do. \
+                       Skip directly to the tool call. Your response must contain \
+                       only the tool_use block.",
             "tools": [{
                 "type": "computer_20250124",
                 "name": "computer",
@@ -140,12 +81,13 @@ impl Claude {
             "messages": [{
                 "role": "user",
                 "content": [
-                    { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": resized } },
+                    { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": image_b64 } },
                     { "type": "text", "text": user_prompt }
                 ]
             }]
         });
 
+        let t_send = std::time::Instant::now();
         let response = reqwest::Client::new()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
@@ -155,6 +97,10 @@ impl Claude {
             .json(&body)
             .send()
             .await?;
+        eprintln!(
+            "[timing-claude:find_point] upload + headers received → {:?}",
+            t_send.elapsed()
+        );
 
         if !response.status().is_success() {
             let status = response.status();
@@ -165,10 +111,20 @@ impl Claude {
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
         let mut tool_json_buffer = String::new();
+        let mut text_buffer = String::new();
         let mut current_block_is_tool = false;
         let mut point: Option<(i64, i64)> = None;
+        let mut first_byte_logged = false;
+        let mut stop_reason: Option<String> = None;
 
         while let Some(chunk) = stream.next().await {
+            if !first_byte_logged {
+                eprintln!(
+                    "[timing-claude:find_point] first SSE byte → {:?}",
+                    t_send.elapsed()
+                );
+                first_byte_logged = true;
+            }
             let chunk = chunk?;
             let s = std::str::from_utf8(&chunk)?;
             buffer.push_str(s);
@@ -188,9 +144,14 @@ impl Claude {
                             }
                         }
                         Some("content_block_delta") => {
-                            if event["delta"]["type"].as_str() == Some("input_json_delta") {
+                            let delta_type = event["delta"]["type"].as_str();
+                            if delta_type == Some("input_json_delta") {
                                 if let Some(j) = event["delta"]["partial_json"].as_str() {
                                     tool_json_buffer.push_str(j);
+                                }
+                            } else if delta_type == Some("text_delta") {
+                                if let Some(t) = event["delta"]["text"].as_str() {
+                                    text_buffer.push_str(t);
                                 }
                             }
                         }
@@ -226,16 +187,49 @@ impl Claude {
                                                 sy.clamp(window_y, window_y + window_height - 1);
                                             on_point(cx, cy);
                                             point = Some((cx, cy));
+                                        } else {
+                                            eprintln!(
+                                                "[claude:find_point] tool fired action={:?} but no valid coordinate: {}",
+                                                input["action"], tool_json_buffer
+                                            );
                                         }
+                                    } else {
+                                        eprintln!(
+                                            "[claude:find_point] tool fired with unexpected action: {}",
+                                            tool_json_buffer
+                                        );
                                     }
+                                } else {
+                                    eprintln!(
+                                        "[claude:find_point] tool_json_buffer didn't parse: {}",
+                                        tool_json_buffer
+                                    );
                                 }
                             }
                             current_block_is_tool = false;
+                        }
+                        Some("message_delta") => {
+                            if let Some(reason) = event["delta"]["stop_reason"].as_str() {
+                                stop_reason = Some(reason.to_string());
+                            }
                         }
                         _ => {}
                     }
                 }
             }
+        }
+
+        // Diagnostics: log why we didn't get a point if we didn't.
+        if point.is_none() {
+            eprintln!(
+                "[claude:find_point] NO POINT returned. stop_reason={:?}, text_emitted={:?}",
+                stop_reason.as_deref().unwrap_or("(none)"),
+                if text_buffer.is_empty() {
+                    "(empty)".to_string()
+                } else {
+                    text_buffer.clone()
+                }
+            );
         }
 
         Ok(point)
@@ -257,6 +251,11 @@ impl Claude {
     where
         F: FnMut(&str),
     {
+        eprintln!(
+            "[timing-claude:describe] image size ({} KB b64)",
+            image_b64.len() / 1024
+        );
+
         let body = serde_json::json!({
             "model": "claude-haiku-4-5",
             "max_tokens": 200,
@@ -271,6 +270,7 @@ impl Claude {
             }]
         });
 
+        let t_send = std::time::Instant::now();
         let response = reqwest::Client::new()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
@@ -279,6 +279,10 @@ impl Claude {
             .json(&body)
             .send()
             .await?;
+        eprintln!(
+            "[timing-claude:describe] upload + headers received → {:?}",
+            t_send.elapsed()
+        );
 
         if !response.status().is_success() {
             let status = response.status();
@@ -289,8 +293,16 @@ impl Claude {
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
         let mut accumulated = String::new();
+        let mut first_byte_logged = false;
 
         while let Some(chunk) = stream.next().await {
+            if !first_byte_logged {
+                eprintln!(
+                    "[timing-claude:describe] first SSE byte → {:?}",
+                    t_send.elapsed()
+                );
+                first_byte_logged = true;
+            }
             let chunk = chunk?;
             let s = std::str::from_utf8(&chunk)?;
             buffer.push_str(s);
