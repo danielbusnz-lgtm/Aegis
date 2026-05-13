@@ -7,22 +7,6 @@ use image::imageops::FilterType;
 use std::io::Cursor;
 use std::process::Command;
 
-/// Captures the entire monitor that's showing the currently active workspace.
-pub fn capture_active_workspace() -> Result<(String, u32, u32), Box<dyn std::error::Error>> {
-    let active = Workspace::get_active()?;
-    let monitor = Monitors::get()?
-        .into_iter()
-        .find(|m| m.active_workspace.id == active.id)
-        .ok_or("no monitor for active workspace")?;
-
-    capture_for_claude(
-        monitor.x,
-        monitor.y,
-        monitor.width as i32,
-        monitor.height as i32,
-    )
-}
-
 /// Returns the geometry (x, y, width, height) of the monitor showing the
 /// currently active workspace, without capturing a screenshot. Used by
 /// callers that delegate the capture step (e.g., `detect_element_location`).
@@ -99,7 +83,10 @@ pub fn resize_jpeg_for_computer_use(
     let img = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()?
         .decode()?;
-    let resized = img.resize_exact(target_w, target_h, FilterType::Lanczos3);
+    // Triangle (bilinear) is ~4x faster than Lanczos3 and visually
+    // indistinguishable for UI element location at Computer Use's
+    // declared resolutions. The quality difference is invisible to Claude.
+    let resized = img.resize_exact(target_w, target_h, FilterType::Triangle);
 
     let mut out: Vec<u8> = Vec::new();
     {

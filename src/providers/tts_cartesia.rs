@@ -1,4 +1,3 @@
-use super::Tts;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use futures_util::StreamExt;
 
@@ -25,39 +24,6 @@ impl TtsCartesia {
     }
 }
 
-impl Tts for TtsCartesia {
-    fn synthesize(&self, text: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let body = serde_json::json!({
-            "model_id": MODEL_ID,
-            "transcript": text,
-            "voice": { "mode": "id", "id": self.voice_id },
-            "output_format": {
-                "container": "wav",
-                "encoding": "pcm_s16le",
-                "sample_rate": 24000,
-            },
-            "language": "en",
-        });
-
-        let response = reqwest::blocking::Client::new()
-            .post("https://api.cartesia.ai/tts/bytes")
-            .bearer_auth(&self.api_key)
-            .header("Cartesia-Version", "2026-03-01")
-            .json(&body)
-            .send()?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Cartesia TTS error {}: {}",
-                response.status(),
-                response.text().unwrap_or_default()
-            )
-            .into());
-        }
-
-        Ok(response.bytes()?.to_vec())
-    }
-}
 
 impl TtsCartesia {
     /// Streaming TTS — POSTs to `/tts/sse` with raw PCM output and fires
