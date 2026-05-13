@@ -3,14 +3,18 @@ use futures_util::StreamExt;
 
 pub struct Claude {
     pub api_key: String,
+    pub http: reqwest::Client,
 }
 
 impl Claude {
-    /// Loads the API key from `.env` or the environment.
-    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+    /// Loads the API key from `.env` or the environment. Takes a shared
+    /// `reqwest::Client` so multiple Claude calls (and Cartesia) reuse
+    /// the same TCP/TLS connection pool — saves the ~150ms handshake on
+    /// every call after the first.
+    pub fn from_env(http: reqwest::Client) -> Result<Self, Box<dyn std::error::Error>> {
         dotenvy::dotenv().ok();
         let api_key = std::env::var("ANTHROPIC_API_KEY")?;
-        Ok(Claude { api_key })
+        Ok(Claude { api_key, http })
     }
 }
 
@@ -88,7 +92,8 @@ impl Claude {
         });
 
         let t_send = std::time::Instant::now();
-        let response = reqwest::Client::new()
+        let response = self
+            .http
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -271,7 +276,8 @@ impl Claude {
         });
 
         let t_send = std::time::Instant::now();
-        let response = reqwest::Client::new()
+        let response = self
+            .http
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")

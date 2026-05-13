@@ -16,7 +16,7 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
 
     // Warm up cpal once on this thread (cpal::Stream is !Send). The stream
     // runs forever; per-turn we just install a sender to start forwarding.
-    let live_mic = mic.start();
+    let running_mic = mic.start();
 
     // Open the audio output sink ONCE at startup. Per-turn we just hand
     // out a fresh Player against this sink (~free).
@@ -46,7 +46,7 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
 
         if let Err(e) = run_one_turn(
             &rt,
-            &live_mic,
+            &running_mic,
             &audio_out,
             &stt,
             &claude,
@@ -82,7 +82,11 @@ fn run_one_turn(
         let api_key = stt.api_key.clone();
         rt.spawn(async move {
             let stt = SttDeepgram { api_key };
-            stt.transcribe_stream(sample_rate, channels, audio_rx).await
+            // TODO(#22): pass Some(interim_tx) here once speculative Claude
+            // orchestration is wired up. transcribe_stream already supports
+            // broadcasting interims for stability detection.
+            stt.transcribe_stream(sample_rate, channels, audio_rx, None)
+                .await
         })
     };
 
@@ -148,6 +152,7 @@ fn run_one_turn(
     let cartesia_for_tts = TtsCartesia {
         api_key: cartesia.api_key.clone(),
         voice_id: cartesia.voice_id.clone(),
+        http: cartesia.http.clone(),
     };
     let barge_in_flag_tts = barge_in.flag.clone();
     // Hand out a fresh Player from the cached sink (cheap). The expensive

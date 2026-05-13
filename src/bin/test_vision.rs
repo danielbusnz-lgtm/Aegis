@@ -5,7 +5,8 @@ mod screenshot;
 mod providers;
 
 fn main() {
-    let claude = providers::claude::Claude::from_env().expect("missing ANTHROPIC_API_KEY");
+    let claude = providers::claude::Claude::from_env(reqwest::Client::new())
+        .expect("missing ANTHROPIC_API_KEY");
 
     let (mx, my, mw, mh) = match screenshot::active_workspace_geometry() {
         Ok(g) => g,

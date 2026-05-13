@@ -30,6 +30,7 @@ impl SttDeepgram {
         sample_rate: u32,
         channels: u16,
         mut audio_rx: UnboundedReceiver<Vec<i16>>,
+        interim_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Build the WSS URL with query params. Deepgram expects the audio
         // format declared here to match what we send. interim_results=true
@@ -102,6 +103,10 @@ impl SttDeepgram {
         let mut finalized = String::new();
         let mut latest_interim = String::new();
 
+        // Track what we last broadcast so we only ping the interim_tx on
+        // actual changes (avoids spamming the speculative watchdog).
+        let mut last_broadcast = String::new();
+
         // Phase 1: live forwarding.
         loop {
             tokio::select! {
@@ -109,7 +114,18 @@ impl SttDeepgram {
                 _ = &mut release_rx => break,
                 msg = read.next() => {
                     match process_frame(msg, &mut finalized, &mut latest_interim) {
-                        FrameOutcome::Continue | FrameOutcome::GotFinal => {}
+                        FrameOutcome::Continue | FrameOutcome::GotFinal => {
+                            // Broadcast the running merged transcript whenever
+                            // it changes, so the speculative watchdog (if any)
+                            // can detect stability.
+                            if let Some(ref tx) = interim_tx {
+                                let current = merge_ref(&finalized, &latest_interim);
+                                if current != last_broadcast {
+                                    last_broadcast = current.clone();
+                                    let _ = tx.send(current);
+                                }
+                            }
+                        }
                         FrameOutcome::WsClosed => {
                             // WS died mid-stream — bail with what we have.
                             let result = merge(finalized, latest_interim);
@@ -219,6 +235,18 @@ fn merge(finalized: String, latest_interim: String) -> String {
     }
     if finalized.is_empty() {
         return latest_interim;
+    }
+    format!("{} {}", finalized, latest_interim)
+}
+
+/// Same as `merge` but borrows its inputs — used by the running-transcript
+/// broadcast inside the read loop where we don't want to consume state.
+fn merge_ref(finalized: &str, latest_interim: &str) -> String {
+    if latest_interim.is_empty() {
+        return finalized.to_string();
+    }
+    if finalized.is_empty() {
+        return latest_interim.to_string();
     }
     format!("{} {}", finalized, latest_interim)
 }

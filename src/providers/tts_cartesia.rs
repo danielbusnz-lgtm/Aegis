@@ -12,15 +12,22 @@ pub const STREAM_CHANNELS: u16 = 1;
 pub struct TtsCartesia {
     pub api_key: String,
     pub voice_id: String,
+    pub http: reqwest::Client,
 }
 
 impl TtsCartesia {
-    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+    /// Loads keys from `.env` or the environment. Takes a shared
+    /// `reqwest::Client` so subsequent calls reuse the same TLS session.
+    pub fn from_env(http: reqwest::Client) -> Result<Self, Box<dyn std::error::Error>> {
         dotenvy::dotenv().ok();
         let api_key = std::env::var("CARTESIA_API_KEY")?;
         let voice_id =
             std::env::var("CARTESIA_VOICE_ID").unwrap_or_else(|_| DEFAULT_VOICE_ID.to_string());
-        Ok(TtsCartesia { api_key, voice_id })
+        Ok(TtsCartesia {
+            api_key,
+            voice_id,
+            http,
+        })
     }
 }
 
@@ -52,7 +59,8 @@ impl TtsCartesia {
             "language": "en",
         });
 
-        let response = reqwest::Client::new()
+        let response = self
+            .http
             .post("https://api.cartesia.ai/tts/sse")
             .bearer_auth(&self.api_key)
             .header("Cartesia-Version", "2026-03-01")

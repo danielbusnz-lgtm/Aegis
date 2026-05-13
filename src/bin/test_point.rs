@@ -20,7 +20,7 @@ fn main() {
     std::thread::spawn(|| {
         std::thread::sleep(Duration::from_secs(3));
 
-        let claude = providers::claude::Claude::from_env()
+        let claude = providers::claude::Claude::from_env(reqwest::Client::new())
             .expect("missing ANTHROPIC_API_KEY");
 
         let (mx, my, mw, mh) =

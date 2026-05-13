@@ -35,13 +35,13 @@ fn main() {
     hotkey::init().expect("signal handler setup");
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let live_mic = mic.start();
+    let running_mic = mic.start();
 
     println!();
     println!("=================================");
     println!("STT pipeline test");
     println!("=================================");
-    println!("config: {}Hz, {}ch", live_mic.sample_rate, live_mic.channels);
+    println!("config: {}Hz, {}ch", running_mic.sample_rate, running_mic.channels);
     println!();
     println!("hold SUPER+space, talk, release. Ctrl+C to quit.");
     println!();
@@ -98,18 +98,18 @@ fn main() {
         // Deepgram WebSocket task
         let stt_handle = {
             let api_key = stt.api_key.clone();
-            let sample_rate = live_mic.sample_rate;
-            let channels = live_mic.channels;
+            let sample_rate = running_mic.sample_rate;
+            let channels = running_mic.channels;
             rt.spawn(async move {
                 let stt = SttDeepgram { api_key };
-                stt.transcribe_stream(sample_rate, channels, deepgram_rx)
+                stt.transcribe_stream(sample_rate, channels, deepgram_rx, None)
                     .await
             })
         };
 
         // Install our interceptor_tx as the cpal forwarding target.
         // This blocks until the hotkey is released.
-        live_mic.capture_until_release(interceptor_tx);
+        running_mic.capture_until_release(interceptor_tx);
         let release_t = Instant::now();
         log_t(&press_t, "release detected");
 
@@ -128,7 +128,7 @@ fn main() {
         let chunks = chunk_count.load(Ordering::Relaxed);
         let samples = total_samples.load(Ordering::Relaxed);
         let audio_ms = (samples as f64
-            / (live_mic.sample_rate as f64 * live_mic.channels as f64))
+            / (running_mic.sample_rate as f64 * running_mic.channels as f64))
             * 1000.0;
 
         eprintln!();
