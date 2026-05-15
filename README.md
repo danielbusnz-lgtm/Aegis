@@ -1,6 +1,6 @@
 # Aegis
 
-Aegis is a low-latency,  AI agent that follows your cursor. You can interact with it via voice, spawn subagents. 
+Aegis is an AI agent that follows your cursor. You can interact with it via voice and spawn subagents to  do tasks.
 
 
 ## Quickstart
