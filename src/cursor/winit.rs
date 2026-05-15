@@ -42,6 +42,39 @@ pub fn point_at(x: i32, y: i32) {
     }
 }
 
+/// Half-open pixel rectangle: [x0, x1) × [y0, y1). Signed because the cursor
+/// can sit slightly off-screen during smoothing, and we clamp into the canvas
+/// before any indexing happens.
+#[derive(Copy, Clone, Debug)]
+struct DirtyRect {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+}
+
+impl DirtyRect {
+    fn union(self, other: Self) -> Self {
+        Self {
+            x0: self.x0.min(other.x0),
+            y0: self.y0.min(other.y0),
+            x1: self.x1.max(other.x1),
+            y1: self.y1.max(other.y1),
+        }
+    }
+    fn clamp(self, w: u32, h: u32) -> Self {
+        Self {
+            x0: self.x0.clamp(0, w as i32),
+            y0: self.y0.clamp(0, h as i32),
+            x1: self.x1.clamp(0, w as i32),
+            y1: self.y1.clamp(0, h as i32),
+        }
+    }
+    fn is_empty(self) -> bool {
+        self.x1 <= self.x0 || self.y1 <= self.y0
+    }
+}
+
 struct CursorApp {
     attrs: WindowAttributes,
     window: Option<Arc<Window>>,
@@ -57,6 +90,10 @@ struct CursorApp {
     cursor_y: f64,
     override_target: Option<(i32, i32, Instant)>,
     last_tick: Option<Instant>,
+    /// Bounding box of where the sprite was drawn on the previous frame, so
+    /// we know which pixels to clear before drawing the new one. `None` means
+    /// no sprite was drawn last frame (or the canvas was just allocated).
+    last_sprite_rect: Option<DirtyRect>,
     /// Frames rendered since `fps_log_start`. Reset every time we log.
     frame_count: u32,
     /// Start of the current 1-second FPS-counting window.
@@ -118,10 +155,14 @@ impl CursorApp {
             .unwrap_or(true);
         if needs_alloc {
             self.canvas = Pixmap::new(size.width, size.height);
+            // softbuffer's buffer may be uninitialized; force a full first pass.
+            self.last_sprite_rect = None;
         }
         let Some(canvas) = self.canvas.as_mut() else {
             return;
         };
+        let canvas_w = canvas.width();
+        let canvas_h = canvas.height();
 
         // Run one tick to advance position.
         let next = tick(
@@ -132,35 +173,87 @@ impl CursorApp {
             &mut self.last_tick,
         );
 
-        // Clear to transparent. Drawing happens only if tick returned a position.
-        canvas.fill(tiny_skia::Color::TRANSPARENT);
-        if let Some((x, y)) = next {
-            let transform = Transform::from_scale(self.sprite_scale, self.sprite_scale)
-                .post_translate(x as f32, y as f32);
-            canvas.draw_pixmap(
-                0,
-                0,
-                self.sprite.as_ref(),
-                &PixmapPaint {
-                    quality: FilterQuality::Bilinear,
-                    ..Default::default()
-                },
-                transform,
-                None,
-            );
+        // Compute the sprite's bounding box on the canvas for this frame (if
+        // anything will be drawn). 2px of padding absorbs bilinear bleed.
+        let sprite_pix_w = (self.sprite.width() as f32 * self.sprite_scale).ceil() as i32;
+        let sprite_pix_h = (self.sprite.height() as f32 * self.sprite_scale).ceil() as i32;
+        let new_rect = next.map(|(x, y)| DirtyRect {
+            x0: x.floor() as i32 - 2,
+            y0: y.floor() as i32 - 2,
+            x1: x.ceil() as i32 + sprite_pix_w + 2,
+            y1: y.ceil() as i32 + sprite_pix_h + 2,
+        });
+
+        // Dirty region = union of last-frame sprite + this-frame sprite, or
+        // the whole canvas if we just allocated (need to initialize softbuffer).
+        let dirty = if needs_alloc {
+            Some(DirtyRect { x0: 0, y0: 0, x1: canvas_w as i32, y1: canvas_h as i32 })
+        } else {
+            match (self.last_sprite_rect, new_rect) {
+                (None, None) => None,
+                (Some(r), None) | (None, Some(r)) => Some(r),
+                (Some(a), Some(b)) => Some(a.union(b)),
+            }
+        };
+
+        if let Some(rect) = dirty {
+            let rect = rect.clamp(canvas_w, canvas_h);
+            if !rect.is_empty() {
+                // Clear the dirty region on the canvas. Zero bytes equals
+                // premultiplied transparent under tiny-skia's RGBA layout.
+                let stride_bytes = canvas_w as usize * 4;
+                let row_start = rect.x0 as usize * 4;
+                let row_end = rect.x1 as usize * 4;
+                let data = canvas.data_mut();
+                for y in rect.y0..rect.y1 {
+                    let row = (y as usize) * stride_bytes;
+                    data[row + row_start..row + row_end].fill(0);
+                }
+
+                // Draw the sprite at the new position. tiny-skia handles
+                // clipping if it extends past the canvas edge.
+                if let Some((x, y)) = next {
+                    let transform = Transform::from_scale(self.sprite_scale, self.sprite_scale)
+                        .post_translate(x as f32, y as f32);
+                    canvas.draw_pixmap(
+                        0,
+                        0,
+                        self.sprite.as_ref(),
+                        &PixmapPaint {
+                            quality: FilterQuality::Bilinear,
+                            ..Default::default()
+                        },
+                        transform,
+                        None,
+                    );
+                }
+
+                // Convert ONLY the dirty region from canvas RGBA bytes into
+                // softbuffer's 0xAARRGGBB u32 pixels. Windows 11 DWM honors
+                // the high byte as alpha, giving per-pixel transparency.
+                let mut buffer = surface.buffer_mut().expect("buffer_mut");
+                let src = canvas.data();
+                let pix_stride = canvas_w as usize;
+                for y in rect.y0..rect.y1 {
+                    let src_row = (y as usize) * pix_stride * 4;
+                    let dst_row = (y as usize) * pix_stride;
+                    for x in rect.x0..rect.x1 {
+                        let i = x as usize;
+                        let c = &src[src_row + i * 4..src_row + i * 4 + 4];
+                        buffer[dst_row + i] =
+                            u32::from_be_bytes([c[3], c[0], c[1], c[2]]);
+                    }
+                }
+                buffer.present().expect("buffer present");
+            }
+        } else {
+            // No sprite this frame and none last frame. Present an unchanged
+            // buffer so softbuffer's frame model stays happy.
+            let buffer = surface.buffer_mut().expect("buffer_mut");
+            buffer.present().expect("buffer present");
         }
 
-        // Copy tiny-skia (RGBA premultiplied) → softbuffer (packed u32).
-        // Pack alpha into the high byte: softbuffer's docs say it's 0RGB, but
-        // Windows 11's DWM is reported to honor the high byte as alpha, giving
-        // us per-pixel transparency. No-op on platforms that genuinely treat
-        // the byte as zero-padding.
-        let mut buffer = surface.buffer_mut().expect("buffer_mut");
-        let src = canvas.data();
-        for (dst, chunk) in buffer.iter_mut().zip(src.chunks_exact(4)) {
-            *dst = u32::from_be_bytes([chunk[3], chunk[0], chunk[1], chunk[2]]);
-        }
-        buffer.present().expect("buffer present");
+        self.last_sprite_rect = new_rect;
 
         // Rolling FPS log: count frames over a 1-second window, then print
         // and reset. Diagnostic for tuning cursor smoothness on different
@@ -211,6 +304,7 @@ pub fn cursor(initial_x: i32, initial_y: i32) -> ! {
         cursor_y: initial_y as f64,
         override_target: None,
         last_tick: None,
+        last_sprite_rect: None,
         frame_count: 0,
         fps_log_start: None,
     };
