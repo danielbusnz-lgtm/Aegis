@@ -1,6 +1,5 @@
 mod audio;
 mod cursor;
-mod device_id;
 mod hotkey;
 mod mouse;
 #[cfg(feature = "hyprland")]

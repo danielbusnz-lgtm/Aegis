@@ -42,7 +42,7 @@ impl Claude {
             });
         }
 
-        let device_id = crate::device_id::load_or_create()?;
+        let device_id = super::device_id::load_or_create()?;
         Ok(Claude {
             http,
             endpoint: PROXY_URL.to_string(),
