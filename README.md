@@ -1,9 +1,6 @@
 # aegis
 
-A voice-controlled AI cursor. Hold a hotkey, ask a question, and the cursor flies to whatever you asked about.
-Built in Rust. Targets Hyprland today, cross-platform later.
-
-Sub-3-second release-to-speech latency on a typical desktop.
+Aegis is a low-latency,  AI agent that follows your cursor. You can interact with it via voice, spawn subagents. 
 
 
 ## Quickstart
@@ -50,12 +47,10 @@ Hold `Insert`, release. Each turn logs mouse pos, saves a screenshot to the
 temp dir, and flies the cursor sprite to the mouse position. Click-through is
 on, so apps below the overlay still receive input.
 
-## Status
 
-Hyprland is the default. Cross-platform support (winit + xcap + mouse_position
-+ global-hotkey) is in active development behind the `winit-window` and
-`crossplatform` Cargo features.
+Contributing
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-## License
+Please make sure to update tests as appropriate.
 
 MIT
