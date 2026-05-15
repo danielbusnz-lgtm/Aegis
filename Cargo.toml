@@ -46,6 +46,7 @@ winit = { version = "0.30", optional = true }
 xcap = { version = "0.9.4", optional = true }
 uuid = { version = "1.10", features = ["v4"] }
 dirs = "5.0"
+fast_image_resize = { version = "5", features = ["image"] }
 
 # Binaries are split by which feature set they need. Without these markers,
 # `cargo build` tries to compile every binary against every feature combo,
