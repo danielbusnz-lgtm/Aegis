@@ -52,7 +52,9 @@ xcap = { version = "0.9.4", optional = true }
 
 [[bin]]
 name = "aegis"
-required-features = ["hyprland"]
+# No required-features: main.rs uses only the module-level abstractions
+# (cursor::, hotkey::, mouse::, screenshot::) so any feature combo that
+# provides those — hyprland or winit-window+crossplatform — works.
 
 [[bin]]
 name = "test_hotkey"
