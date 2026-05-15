@@ -1,0 +1,19 @@
+name = "aegis-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-05-15"
+
+# Default daily caps (per device, UTC day). Override here without redeploying
+# code — `wrangler deploy` picks up changes.
+[vars]
+DAILY_INPUT_TOKEN_CAP = "30000"
+DAILY_OUTPUT_TOKEN_CAP = "10000"
+
+# KV namespace for per-device usage counters. Create with:
+#   wrangler kv namespace create USAGE_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "USAGE_KV"
+id = "cdfd0f967d61437d8a4833b18899e343"
+
+# Secrets (set out-of-band, never committed):
+#   wrangler secret put ANTHROPIC_API_KEY
