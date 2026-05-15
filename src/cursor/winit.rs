@@ -187,7 +187,12 @@ impl CursorApp {
         // Dirty region = union of last-frame sprite + this-frame sprite, or
         // the whole canvas if we just allocated (need to initialize softbuffer).
         let dirty = if needs_alloc {
-            Some(DirtyRect { x0: 0, y0: 0, x1: canvas_w as i32, y1: canvas_h as i32 })
+            Some(DirtyRect {
+                x0: 0,
+                y0: 0,
+                x1: canvas_w as i32,
+                y1: canvas_h as i32,
+            })
         } else {
             match (self.last_sprite_rect, new_rect) {
                 (None, None) => None,
@@ -240,8 +245,7 @@ impl CursorApp {
                     for x in rect.x0..rect.x1 {
                         let i = x as usize;
                         let c = &src[src_row + i * 4..src_row + i * 4 + 4];
-                        buffer[dst_row + i] =
-                            u32::from_be_bytes([c[3], c[0], c[1], c[2]]);
+                        buffer[dst_row + i] = u32::from_be_bytes([c[3], c[0], c[1], c[2]]);
                     }
                 }
                 buffer.present().expect("buffer present");
