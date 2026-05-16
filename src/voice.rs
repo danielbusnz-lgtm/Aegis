@@ -17,15 +17,17 @@ fn set_cursor_idle() {
 fn set_cursor_idle() {}
 
 /// Returns true if the user's query expects a spoken description from Claude.
-/// False for unambiguous "just point at X" queries, where `find_point` alone
-/// is enough and skipping `describe` saves ~1s of Claude TTFT + tokens.
+/// False for "just do X" commands — pointing AND action verbs — where the
+/// effect (cursor flying, browser opening, app launching) is the response
+/// and TTS narration would just be noise.
 ///
-/// Conservative: defaults to true on anything that isn't an obvious
-/// navigation phrase, so we err on the side of giving more info rather than
-/// less.
+/// Conservative: defaults to true on anything ambiguous, so we err on the
+/// side of giving more info rather than less.
 fn wants_description(transcript: &str) -> bool {
     let lower = transcript.trim().to_lowercase();
-    // Strip leading conversational filler that some queries start with.
+    // Strip leading conversational filler AND polite-request scaffolding
+    // so phrases like "can you open up youtube please" resolve to a bare
+    // "open up youtube" before the action-prefix match.
     let stripped = lower
         .trim_start_matches("um, ")
         .trim_start_matches("uh, ")
@@ -36,12 +38,24 @@ fn wants_description(transcript: &str) -> bool {
         .trim_start_matches("no. ")
         .trim_start_matches("no, ")
         .trim_start_matches("hey, ")
-        .trim_start_matches("hey ");
+        .trim_start_matches("hey ")
+        .trim_start_matches("can you ")
+        .trim_start_matches("could you ")
+        .trim_start_matches("would you ")
+        .trim_start_matches("please ")
+        .trim_start_matches("i want to ")
+        .trim_start_matches("i'd like to ")
+        .trim_start_matches("i want you to ")
+        .trim_start_matches("let's ")
+        .trim_start_matches("lets ")
+        .trim_start_matches("just ");
 
-    // Only the most unambiguous "just point" patterns. Adding more here
-    // (e.g., "find", "open", "go to") would catch false negatives — they
-    // can mean either point or describe depending on context.
-    let nav_starts = [
+    // Phrases that are unambiguously commands, not questions. Pointing verbs
+    // ("where is X", "click X") and action verbs ("open X", "launch X",
+    // "switch to X", "go to X") all dispatch through find_action's tools;
+    // narrating them adds latency without adding info.
+    let action_starts = [
+        // Pointing
         "where is",
         "where's",
         "where are",
@@ -49,8 +63,17 @@ fn wants_description(transcript: &str) -> bool {
         "click on",
         "point at",
         "point to",
+        // Actions
+        "open ",
+        "launch ",
+        "switch to ",
+        "switch ",
+        "go to ",
+        "navigate to ",
+        "focus ",
+        "start ",
     ];
-    !nav_starts.iter().any(|p| stripped.starts_with(p))
+    !action_starts.iter().any(|p| stripped.starts_with(p))
 }
 
 pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: TtsCartesia) {
@@ -284,7 +307,7 @@ fn run_one_turn(
         want_desc
     );
 
-    // Both Claude calls now share the same resized image. find_point still
+    // Both Claude calls now share the same resized image. find_action still
     // borrows resized_b64 directly; voice_task is `async move` so it needs
     // its own copy. Clone is ~226KB, happens once per turn.
     let resized_b64_for_voice = resized_b64.clone();
@@ -292,22 +315,50 @@ fn run_one_turn(
     let barge_in_flag_claude = barge_in.flag.clone();
     print!("claude: ");
     rt.block_on(async {
-        let cursor_task = claude.find_point(
+        let cursor_task = claude.find_action(
             &transcript,
             &resized_b64,
             x as i64,
             y as i64,
             w as i64,
             h as i64,
-            |px, py| {
+            |action| {
+                use crate::providers::claude::Action;
                 eprintln!(
-                    "\n[timing] CURSOR FIRES → {:?} (at {},{})",
+                    "\n[timing] ACTION FIRES → {:?}: {:?}",
                     release_t.elapsed(),
-                    px,
-                    py
+                    action
                 );
-                set_cursor_idle();
-                cursor::point_at(px as i32, py as i32);
+                match action {
+                    Action::Point { x: px, y: py } => {
+                        set_cursor_idle();
+                        cursor::point_at(px as i32, py as i32);
+                    }
+                    Action::Click { x: px, y: py } => {
+                        set_cursor_idle();
+                        // Overlay animates on GTK thread; click_at enqueues
+                        // to the input executor. Both kick off the same
+                        // instant so the visual cursor landing and the real
+                        // click look simultaneous.
+                        cursor::point_at(px as i32, py as i32);
+                        crate::actions::click_at(px, py);
+                    }
+                    Action::Type { text } => {
+                        crate::actions::type_text(&text);
+                    }
+                    Action::OpenUrl { url } => {
+                        set_cursor_idle();
+                        crate::actions::open_url(&url);
+                    }
+                    Action::LaunchApp { app } => {
+                        set_cursor_idle();
+                        crate::actions::launch_app(&app);
+                    }
+                    Action::SwitchToWindow { target } => {
+                        set_cursor_idle();
+                        crate::actions::switch_to_window(&target);
+                    }
+                }
             },
         );
 

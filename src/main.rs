@@ -1,3 +1,4 @@
+mod actions;
 mod audio;
 mod cursor;
 mod hotkey;
@@ -22,6 +23,8 @@ fn main() {
     let cartesia = providers::tts_cartesia::TtsCartesia::from_env(http)
         .expect("missing CARTESIA_API_KEY");
     let mic = audio::Mic::init();
+    actions::init_input_executor();
+    actions::check_input_injection_available();
 
     // Let the cursor overlay's Soundwave read live mic RMS.
     #[cfg(feature = "hyprland")]

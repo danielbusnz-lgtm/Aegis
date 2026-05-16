@@ -31,35 +31,38 @@ fn main() {
             screenshot::capture_for_claude(mx, my, mw as i32, mh as i32).expect("capture failed");
 
         let prompt = "Find the most prominent UI element on screen and click it.";
-        println!("\nasking Claude (find_point only)...");
+        println!("\nasking Claude (find_action only)...");
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         let start = std::time::Instant::now();
-        let point = rt
+        let action = rt
             .block_on(async {
                 claude
-                    .find_point(
+                    .find_action(
                         prompt,
                         &b64,
                         mx as i64,
                         my as i64,
                         mw as i64,
                         mh as i64,
-                        |px, py| {
-                            eprintln!(
-                                "[cursor] firing at ({}, {}) at +{:?}",
-                                px,
-                                py,
-                                start.elapsed()
-                            );
-                            cursor::point_at(px as i32, py as i32);
+                        |action| {
+                            use providers::claude::Action;
+                            if let Action::Click { x, y } = action {
+                                eprintln!(
+                                    "[cursor] firing at ({}, {}) at +{:?}",
+                                    x,
+                                    y,
+                                    start.elapsed()
+                                );
+                                cursor::point_at(x as i32, y as i32);
+                            }
                         },
                     )
                     .await
             })
-            .expect("find_point failed");
+            .expect("find_action failed");
 
-        println!("[done] total: {:?}, point: {:?}", start.elapsed(), point);
+        println!("[done] total: {:?}, action: {:?}", start.elapsed(), action);
     });
 
     cursor::cursor(500, 500);
