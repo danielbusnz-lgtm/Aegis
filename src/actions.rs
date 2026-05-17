@@ -17,6 +17,7 @@ enum InputCmd {
     Click { x: i64, y: i64 },
     Type { text: String },
     Key { combo: String },
+    Scroll { direction: String, amount: u32 },
 }
 
 static INPUT_TX: OnceLock<Sender<InputCmd>> = OnceLock::new();
@@ -245,6 +246,22 @@ pub fn press_key(combo: &str) {
     });
 }
 
+/// Scroll by sending repeated arrow-key presses via ydotool. Wayland has
+/// no clean "scroll at point" primitive, so we approximate with keyboard
+/// scrolling — works in browsers, terminals, file managers, anywhere
+/// arrow keys move the viewport. The `amount` parameter is roughly
+/// "wheel clicks"; we map each click to ~3 arrow presses.
+pub fn scroll(direction: &str, amount: u32) {
+    eprintln!(
+        "[action:scroll] queueing scroll {} × {}",
+        direction, amount
+    );
+    enqueue(InputCmd::Scroll {
+        direction: direction.to_string(),
+        amount,
+    });
+}
+
 fn enqueue(cmd: InputCmd) {
     match INPUT_TX.get() {
         Some(tx) => {
@@ -272,9 +289,41 @@ pub fn init_input_executor() {
                 InputCmd::Click { x, y } => exec_click(x, y),
                 InputCmd::Type { text } => exec_type(&text),
                 InputCmd::Key { combo } => exec_key(&combo),
+                InputCmd::Scroll { direction, amount } => exec_scroll(&direction, amount),
             }
         }
     });
+}
+
+fn exec_scroll(direction: &str, amount: u32) {
+    // Map direction to the corresponding arrow-key scancode. Anything we
+    // don't recognize falls back to Down arrow.
+    let scancode: u16 = match direction.to_lowercase().as_str() {
+        "down" => 108, // KEY_DOWN
+        "up" => 103,   // KEY_UP
+        "left" => 105, // KEY_LEFT
+        "right" => 106, // KEY_RIGHT
+        other => {
+            eprintln!(
+                "[action:scroll] unknown direction '{}', defaulting to down",
+                other
+            );
+            108
+        }
+    };
+    // Each "wheel click" Claude requests ≈ 3 arrow presses. Cap at 30
+    // total presses to prevent a runaway loop if Claude sends amount=99.
+    let presses = (amount.saturating_mul(3)).clamp(1, 30);
+
+    let mut args: Vec<String> = vec!["key".to_string()];
+    for _ in 0..presses {
+        args.push(format!("{}:1", scancode));
+        args.push(format!("{}:0", scancode));
+    }
+    thread::sleep(Duration::from_millis(30));
+    if let Err(e) = Command::new("ydotool").args(&args).status() {
+        eprintln!("[action:scroll] ydotool failed: {}", e);
+    }
 }
 
 fn exec_click(x: i64, y: i64) {

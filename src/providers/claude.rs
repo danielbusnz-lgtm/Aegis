@@ -21,6 +21,11 @@ pub enum Action {
     /// "Return", "Tab", "Escape", "ctrl+a", "ctrl+f". The `key` string
     /// is whatever Claude emitted; parsing happens in the action handler.
     Key { key: String },
+    /// `computer` tool, `scroll`. Direction is "up"/"down"/"left"/"right";
+    /// amount is the number of "wheel clicks" Claude wants. Coordinate
+    /// (if Claude provided one) is currently ignored — Wayland doesn't
+    /// expose a clean "scroll at point" primitive without raw evdev.
+    Scroll { direction: String, amount: u32 },
     /// `open_url` custom tool. URL is whatever Claude emitted; validation
     /// happens at execution time, not here.
     OpenUrl { url: String },
@@ -825,6 +830,11 @@ fn system_prompt_for_actions() -> &'static str {
        for hotkeys (e.g. \"c\" toggles captions on YouTube, \"k\" \
        play/pause) or to submit forms when you didn't end a `type` with \
        \\n.\n\
+     - `computer` scroll(scroll_direction=\"up\"|\"down\"|\"left\"|\"right\", \
+       scroll_amount=N): scroll the focused area. amount is in approximate \
+       wheel-clicks (1-10 is typical). Use scroll_amount=3 for short \
+       scrolls, 5+ for longer pans. Coordinate is ignored — scrolling \
+       happens on whatever element is focused.\n\
      - `open_url`: ALWAYS use this for web destinations — websites, web \
        apps, online docs. Phrases like \"open YouTube\", \"go to gmail\", \
        \"pull up github\", \"open the rust docs\", \"navigate to twitter\" \
@@ -1024,6 +1034,22 @@ fn parse_tool_call(
         return Some(Action::Key {
             key: key.to_string(),
         });
+    }
+    if action == "scroll" {
+        let direction = effective_input["scroll_direction"]
+            .as_str()
+            .unwrap_or("down")
+            .to_string();
+        // scroll_amount may arrive as integer or stringified integer.
+        let amount = effective_input["scroll_amount"]
+            .as_u64()
+            .or_else(|| {
+                effective_input["scroll_amount"]
+                    .as_str()
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
+            .unwrap_or(3) as u32;
+        return Some(Action::Scroll { direction, amount });
     }
 
     // Coordinate actions. Accept either a JSON array [x, y] OR a JSON

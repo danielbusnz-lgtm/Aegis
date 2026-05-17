@@ -376,6 +376,9 @@ fn run_one_turn(
                     Action::Key { key } => {
                         crate::actions::press_key(&key);
                     }
+                    Action::Scroll { direction, amount } => {
+                        crate::actions::scroll(&direction, amount);
+                    }
                     Action::OpenUrl { url } => {
                         set_cursor_idle();
                         crate::actions::open_url(&url);

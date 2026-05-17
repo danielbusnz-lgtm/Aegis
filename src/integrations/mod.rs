@@ -19,6 +19,7 @@
 //! runtime" surprises.
 
 pub mod spotify;
+pub mod youtube;
 
 /// Tool schemas to inject into Claude's tools array. Only tools from
 /// integrations whose `is_available()` returns true are included.
@@ -26,6 +27,9 @@ pub fn all_tools() -> Vec<serde_json::Value> {
     let mut tools: Vec<serde_json::Value> = vec![];
     if spotify::is_available() {
         tools.extend(spotify::tools());
+    }
+    if youtube::is_available() {
+        tools.extend(youtube::tools());
     }
     tools
 }
@@ -36,6 +40,9 @@ pub fn all_tools() -> Vec<serde_json::Value> {
 /// tool name — caller logs the unknown name.
 pub fn dispatch(name: &str, input: &serde_json::Value) -> bool {
     if spotify::dispatch(name, input) {
+        return true;
+    }
+    if youtube::dispatch(name, input) {
         return true;
     }
     false
