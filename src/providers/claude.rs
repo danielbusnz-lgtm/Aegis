@@ -1,5 +1,6 @@
 use crate::screenshot::pick_declared_resolution;
 use futures_util::StreamExt;
+use std::time::Duration;
 
 /// A side-effecting action Claude requested via one of the tools in
 /// `find_action`. The streaming parser surfaces these in real time so the
@@ -457,6 +458,446 @@ impl Claude {
         }
 
         Ok(accumulated)
+    }
+
+    /// Multi-step agent loop. Each iteration calls Claude with the running
+    /// message history, executes any tool_use blocks via `on_action`, waits
+    /// SETTLE_MS for the UI to settle, captures a fresh screenshot via
+    /// `take_screenshot`, appends the assistant turn + a user tool_result
+    /// turn (containing the new screenshot), and recurses. Exits when
+    /// Claude returns a response with no tool calls (text-only answer),
+    /// when MAX_STEPS is reached, or when the future is dropped by an
+    /// outer barge-in select.
+    ///
+    /// Returns the final text content from the last iteration — useful as
+    /// a spoken summary if you want to drop the parallel `describe_with_image`
+    /// later. For now voice.rs still runs describe in parallel and the
+    /// returned text is informational only.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn run_agent_loop<F, S>(
+        &self,
+        prompt: &str,
+        initial_screenshot_b64: &str,
+        window_x: i64,
+        window_y: i64,
+        window_width: i64,
+        window_height: i64,
+        mut take_screenshot: S,
+        mut on_action: F,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
+    where
+        F: FnMut(Action),
+        S: FnMut() -> Result<String, Box<dyn std::error::Error + Send + Sync>>,
+    {
+        const MAX_STEPS: usize = 10;
+        const SETTLE_MS: u64 = 600;
+        const KEEP_RECENT_SCREENSHOTS: usize = 3;
+
+        let (declared_w, declared_h) = pick_declared_resolution(window_width, window_height);
+
+        // Build initial user turn: screenshot + transcript prompt.
+        let user_prompt = format!(
+            "The user said: \"{}\". Pick the best action(s) and invoke their tools. \
+             If the request needs multiple steps (e.g. \"open YouTube and search X\"), \
+             call multiple tools across iterations — you'll get a fresh screenshot \
+             after each batch. When the task is fully done, respond with plain text \
+             and no tool calls to end the chain.",
+            prompt
+        );
+        let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({
+            "role": "user",
+            "content": [
+                { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": initial_screenshot_b64 } },
+                { "type": "text", "text": user_prompt }
+            ]
+        })];
+
+        let mut final_text = String::new();
+
+        for step in 0..MAX_STEPS {
+            let t_step_start = std::time::Instant::now();
+            eprintln!(
+                "[agent-loop] step {}/{} starting (messages history: {} turns)",
+                step + 1,
+                MAX_STEPS,
+                messages.len()
+            );
+
+            let t_build = std::time::Instant::now();
+            let body = serde_json::json!({
+                "model": "claude-haiku-4-5",
+                "max_tokens": 1024,
+                "stream": true,
+                "system": system_prompt_for_actions(),
+                "tools": tools_array_value(declared_w, declared_h),
+                "messages": messages,
+            });
+            let body_size_kb = serde_json::to_vec(&body)
+                .map(|v| v.len() / 1024)
+                .unwrap_or(0);
+            eprintln!(
+                "[agent-loop] step {} body built ({} KB) in {:?}",
+                step + 1,
+                body_size_kb,
+                t_build.elapsed()
+            );
+
+            let t_send = std::time::Instant::now();
+            let response = self
+                .http
+                .post(&self.endpoint)
+                .header(&self.auth.0, &self.auth.1)
+                .header("anthropic-version", "2023-06-01")
+                .header("anthropic-beta", "computer-use-2025-01-24")
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+            eprintln!(
+                "[agent-loop] step {} upload + response headers → {:?}",
+                step + 1,
+                t_send.elapsed()
+            );
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body_text = response.text().await.unwrap_or_default();
+                return Err(format!("Claude API error {}: {}", status, body_text).into());
+            }
+
+            // Parse streaming response. Collect tool_use blocks (with their
+            // ids so we can pair them with tool_results next iteration) and
+            // any free text. Fire on_action for each parsed tool the moment
+            // its input JSON completes.
+            let t_stream_start = std::time::Instant::now();
+            let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            let mut text_content = String::new();
+            let mut tool_calls: Vec<(String, String, String)> = vec![]; // (id, name, input_json)
+            let mut current_tool_name: Option<String> = None;
+            let mut current_tool_id: Option<String> = None;
+            let mut tool_json_buffer = String::new();
+            let mut first_byte_logged = false;
+
+            while let Some(chunk) = stream.next().await {
+                if !first_byte_logged {
+                    eprintln!(
+                        "[agent-loop] step {} first SSE byte → {:?} (Claude TTFT)",
+                        step + 1,
+                        t_stream_start.elapsed()
+                    );
+                    first_byte_logged = true;
+                }
+                let chunk = chunk?;
+                let s = std::str::from_utf8(&chunk)?;
+                buffer.push_str(s);
+
+                while let Some(idx) = buffer.find("\n\n") {
+                    let frame: String = buffer.drain(..idx + 2).collect();
+                    for line in frame.lines() {
+                        let Some(data) = line.strip_prefix("data: ") else { continue; };
+                        let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else { continue; };
+
+                        match event["type"].as_str() {
+                            Some("content_block_start") => {
+                                if event["content_block"]["type"].as_str() == Some("tool_use") {
+                                    current_tool_name = event["content_block"]["name"].as_str().map(str::to_string);
+                                    current_tool_id = event["content_block"]["id"].as_str().map(str::to_string);
+                                    tool_json_buffer.clear();
+                                } else {
+                                    current_tool_name = None;
+                                    current_tool_id = None;
+                                }
+                            }
+                            Some("content_block_delta") => {
+                                let delta_type = event["delta"]["type"].as_str();
+                                if delta_type == Some("input_json_delta") {
+                                    if let Some(j) = event["delta"]["partial_json"].as_str() {
+                                        tool_json_buffer.push_str(j);
+                                    }
+                                } else if delta_type == Some("text_delta") {
+                                    if let Some(t) = event["delta"]["text"].as_str() {
+                                        text_content.push_str(t);
+                                    }
+                                }
+                            }
+                            Some("content_block_stop") => {
+                                if let (Some(name), Some(id)) =
+                                    (current_tool_name.take(), current_tool_id.take())
+                                {
+                                    if !tool_json_buffer.is_empty() {
+                                        let input_json = tool_json_buffer.clone();
+                                        if let Ok(input) = serde_json::from_str::<serde_json::Value>(&input_json) {
+                                            if let Some(action) = parse_tool_call(
+                                                &name, &input, declared_w, declared_h,
+                                                window_x, window_y, window_width, window_height,
+                                            ) {
+                                                on_action(action);
+                                            }
+                                            tool_calls.push((id, name, input_json));
+                                        }
+                                    }
+                                    tool_json_buffer.clear();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            eprintln!(
+                "[agent-loop] step {} stream complete → {:?} ({} tool(s), {} text chars)",
+                step + 1,
+                t_stream_start.elapsed(),
+                tool_calls.len(),
+                text_content.len()
+            );
+
+            final_text = text_content.clone();
+
+            // Exit condition: no tool calls means Claude is done.
+            if tool_calls.is_empty() {
+                eprintln!(
+                    "[agent-loop] step {} returned text-only ({} chars), exiting after {:?}",
+                    step + 1,
+                    final_text.len(),
+                    t_step_start.elapsed()
+                );
+                break;
+            }
+
+            // Append the assistant turn that just streamed.
+            let t_append = std::time::Instant::now();
+            let mut assistant_content: Vec<serde_json::Value> = vec![];
+            if !text_content.is_empty() {
+                assistant_content.push(serde_json::json!({ "type": "text", "text": text_content }));
+            }
+            for (id, name, input_json) in &tool_calls {
+                let input: serde_json::Value =
+                    serde_json::from_str(input_json).unwrap_or_else(|_| serde_json::json!({}));
+                assistant_content.push(serde_json::json!({
+                    "type": "tool_use",
+                    "id": id,
+                    "name": name,
+                    "input": input,
+                }));
+            }
+            messages.push(serde_json::json!({ "role": "assistant", "content": assistant_content }));
+            eprintln!(
+                "[agent-loop] step {} assistant turn appended in {:?}",
+                step + 1,
+                t_append.elapsed()
+            );
+
+            // Settle: let UI react to the actions before taking the next screenshot.
+            let t_settle = std::time::Instant::now();
+            tokio::time::sleep(Duration::from_millis(SETTLE_MS)).await;
+            eprintln!(
+                "[agent-loop] step {} settle ({}ms) → {:?} actual",
+                step + 1,
+                SETTLE_MS,
+                t_settle.elapsed()
+            );
+
+            // Capture fresh screenshot for the next iteration's tool_result.
+            let t_shot = std::time::Instant::now();
+            let new_screenshot = take_screenshot()?;
+            eprintln!(
+                "[agent-loop] step {} screenshot captured ({} KB) in {:?}",
+                step + 1,
+                new_screenshot.len() / 1024,
+                t_shot.elapsed()
+            );
+
+            // Append tool_results — one per tool_use_id, each with the same
+            // post-action screenshot (Claude needs to see what changed).
+            let t_tail = std::time::Instant::now();
+            let tool_results: Vec<serde_json::Value> = tool_calls
+                .iter()
+                .map(|(id, _, _)| {
+                    serde_json::json!({
+                        "type": "tool_result",
+                        "tool_use_id": id,
+                        "content": [
+                            { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": new_screenshot } }
+                        ]
+                    })
+                })
+                .collect();
+            messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
+
+            // Linear token cost grows fast if we ship every screenshot
+            // forever — strip image data from older tool_results, keeping
+            // only the N most recent.
+            trim_old_screenshots(&mut messages, KEEP_RECENT_SCREENSHOTS);
+            eprintln!(
+                "[agent-loop] step {} tool_result + trim in {:?}",
+                step + 1,
+                t_tail.elapsed()
+            );
+
+            eprintln!(
+                "[agent-loop] step {} TOTAL {:?}",
+                step + 1,
+                t_step_start.elapsed()
+            );
+        }
+
+        Ok(final_text)
+    }
+}
+
+/// Shared system prompt used by `find_action` and `run_agent_loop`. Kept
+/// as a function (not a const) so it can be tweaked without breaking the
+/// const-eval rules around multi-line raw strings.
+fn system_prompt_for_actions() -> &'static str {
+    "You are a desktop voice-assistant action dispatcher.\n\n\
+     CRITICAL: NEVER call action=\"screenshot\" on the computer tool. \
+     A fresh screenshot of the user's screen is ALREADY attached to \
+     this message, and after every tool_result a new screenshot will be \
+     attached automatically. Calling screenshot wastes a full Claude \
+     turn (~6 seconds of user-perceived latency), produces no new \
+     information, and visibly slows down multi-step chains. If you \
+     think you need to \"look again,\" you don't — the next tool_result \
+     will already contain the latest pixels. Just emit the next real \
+     action (click, type, open_url, etc.) directly.\n\n\
+     Pick the tool(s) needed for the user's request:\n\
+     - `computer` mouse_move(coordinate=[x,y]): the user wants to SEE \
+       where something is on screen, no click (\"where is the play \
+       button\", \"show me X\", \"find X\", \"point at X\"). Cursor \
+       visually moves but no input is injected.\n\
+     - `computer` left_click(coordinate=[x,y]): the user wants to \
+       actually CLICK something visible on screen (\"click the play \
+       button\", \"press X\", \"select that\"). Cursor moves AND a \
+       real click fires.\n\
+     - `computer` type(text=\"...\"): type text into the currently \
+       focused field. End text with \\n if the user wants it submitted \
+       (search, send). For multi-step intents emit BOTH left_click on \
+       the input AND type(text=\"...\\n\") in the same response.\n\
+     - `open_url`: ALWAYS use this for web destinations — websites, web \
+       apps, online docs. Phrases like \"open YouTube\", \"go to gmail\", \
+       \"pull up github\", \"open the rust docs\", \"navigate to twitter\" \
+       all map to open_url with the canonical URL (https://youtube.com, \
+       https://gmail.com, https://github.com, https://doc.rust-lang.org, \
+       etc.). NEVER use launch_app for these — do NOT call \
+       launch_app(\"firefox\") or launch_app(\"chrome\") even if a browser \
+       isn't visibly open; aegis handles which browser to use internally. \
+       Construct the URL and call open_url.\n\
+     - `launch_app`: start a NON-browser desktop app that isn't running \
+       yet (\"open spotify\", \"launch vs code\", \"open my terminal\", \
+       \"open obsidian\"). Pass the lowercase common name. Do NOT use \
+       for browsers or websites — those go through open_url.\n\
+     - `switch_to_window`: focus an app the user already has open. \
+       Pass a window class or title substring.\n\
+     If the user's intent requires multiple ordered steps (\"open X, \
+     then click Y, then type Z\"), emit only the tools needed for the \
+     CURRENT step — you'll see a fresh screenshot after the tools run \
+     and can pick the next step. When the whole task is done, respond \
+     with plain text and no tool calls to end the chain. No preamble, \
+     no explanation."
+}
+
+/// Shared tools array used by both single-call and loop entry points.
+fn tools_array_value(declared_w: u32, declared_h: u32) -> serde_json::Value {
+    serde_json::json!([
+        {
+            "type": "computer_20250124",
+            "name": "computer",
+            "display_width_px": declared_w,
+            "display_height_px": declared_h
+        },
+        {
+            "name": "open_url",
+            "description": "Open a URL in the user's default web browser. \
+                Use ONLY for full https:// or http:// URLs the user explicitly \
+                wants to navigate to. Do NOT use for clicking a link visible on \
+                screen — use the computer tool's left_click for that.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "Fully-qualified URL including scheme." }
+                },
+                "required": ["url"]
+            }
+        },
+        {
+            "name": "launch_app",
+            "description": "Launch a desktop application by name. Use for queries \
+                like 'open Spotify', 'launch Firefox'. The app argument is the \
+                app's common name. Do NOT use for switching to an already-running \
+                app — use switch_to_window for that.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "app": { "type": "string", "description": "App name or .desktop file basename, lowercase." }
+                },
+                "required": ["app"]
+            }
+        },
+        {
+            "name": "switch_to_window",
+            "description": "Focus an already-running application window. Use for \
+                'switch to Firefox' when the app is already open. Do NOT use to \
+                launch a new app.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string", "description": "Window class or title substring." }
+                },
+                "required": ["target"]
+            }
+        }
+    ])
+}
+
+/// Trim image data from `tool_result` blocks older than the most recent
+/// `keep_last_n` screenshots. Replaces the image with a text placeholder
+/// so Claude knows there WAS a screenshot at that point, but the bytes
+/// are gone. Keeps the conversation graph intact while controlling cost.
+fn trim_old_screenshots(messages: &mut [serde_json::Value], keep_last_n: usize) {
+    let placeholder = || serde_json::json!({
+        "type": "text",
+        "text": "[older screenshot omitted]"
+    });
+    let mut seen = 0usize;
+    for msg in messages.iter_mut().rev() {
+        if msg["role"] != "user" {
+            continue;
+        }
+        let Some(content) = msg["content"].as_array_mut() else { continue; };
+        for block in content.iter_mut() {
+            // Two image shapes show up in user messages:
+            //   1. Direct image block on the initial transcript turn:
+            //      {"type": "image", "source": {...}}
+            //   2. Image inside a tool_result content array on each loop
+            //      iteration:
+            //      {"type": "tool_result", "content": [{"type": "image", ...}]}
+            // Both count toward the "N most recent screenshots" budget so
+            // the initial transcript image doesn't live forever and bloat
+            // the body indefinitely.
+            if block["type"] == "image" {
+                if seen < keep_last_n {
+                    seen += 1;
+                } else {
+                    *block = placeholder();
+                }
+                continue;
+            }
+            if block["type"] != "tool_result" {
+                continue;
+            }
+            let Some(inner) = block["content"].as_array_mut() else { continue; };
+            for item in inner.iter_mut() {
+                if item["type"] == "image" {
+                    if seen < keep_last_n {
+                        seen += 1;
+                    } else {
+                        *item = placeholder();
+                    }
+                }
+            }
+        }
     }
 }
 

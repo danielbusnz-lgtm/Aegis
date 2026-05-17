@@ -20,8 +20,15 @@ enum InputCmd {
 
 static INPUT_TX: OnceLock<Sender<InputCmd>> = OnceLock::new();
 
-/// Open a URL in the user's default browser. Validates the URL up front so
-/// hallucinated junk from Claude never reaches the OS.
+/// Open a URL in the user's currently-focused browser when possible, falling
+/// back to xdg-open. Priority:
+///   1. `AEGIS_BROWSER` env var — force a specific binary.
+///   2. Hyprland's currently-focused window, if it's a Chromium-family
+///      browser (Chrome, Brave, Chromium, Edge, Vivaldi). Chromium-family
+///      can be invoked directly without D-Bus session issues.
+///   3. xdg-open — uses the system default browser. Necessary for Firefox
+///      since direct `firefox <url>` calls hang on D-Bus when aegis isn't
+///      in the user session.
 pub fn open_url(raw: &str) {
     let parsed = match url::Url::parse(raw) {
         Ok(u) => u,
@@ -39,12 +46,83 @@ pub fn open_url(raw: &str) {
     }
 
     eprintln!("[action:open_url] opening {}", raw);
+
+    if let Ok(forced) = std::env::var("AEGIS_BROWSER") {
+        eprintln!("[action:open_url] AEGIS_BROWSER override → {}", forced);
+        if let Err(e) = Command::new(&forced).arg(raw).spawn() {
+            eprintln!("[action:open_url] AEGIS_BROWSER spawn failed: {}", e);
+        }
+        raise_likely_browser();
+        return;
+    }
+
+    if let Some(bin) = focused_browser_binary() {
+        eprintln!("[action:open_url] focused window is {} → routing there", bin);
+        if let Err(e) = Command::new(&bin).arg(raw).spawn() {
+            eprintln!(
+                "[action:open_url] direct browser spawn failed ({}), falling back to xdg-open: {}",
+                bin, e
+            );
+            let _ = open::that_detached(raw);
+        }
+        raise_likely_browser();
+        return;
+    }
+
+    eprintln!("[action:open_url] no Chromium-family browser focused → xdg-open (default)");
     if let Err(e) = open::that_detached(raw) {
-        eprintln!("[action:open_url] open failed: {}", e);
+        eprintln!("[action:open_url] xdg-open failed: {}", e);
         return;
     }
 
     raise_likely_browser();
+}
+
+/// Query Hyprland for the currently-focused window's class. If that class
+/// maps to a Chromium-family browser AND the corresponding binary exists
+/// on PATH, return the binary name. Returns None for Firefox (intentionally,
+/// since direct calls hang on D-Bus) and for non-browser windows.
+fn focused_browser_binary() -> Option<String> {
+    let output = Command::new("hyprctl")
+        .args(["activewindow", "-j"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let window: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let class = window["class"].as_str()?.to_lowercase();
+
+    let candidates: &[&str] = match class.as_str() {
+        // Firefox-family deliberately not routed directly — defer to xdg-open
+        // so it goes through the session's lock-file + D-Bus handshake.
+        "firefox" | "firefox-esr" | "librewolf" | "waterfox" | "zen" => return None,
+        "chromium" | "chromium-browser" => &["chromium"],
+        "google-chrome" | "google-chrome-stable" | "chrome" => {
+            &["google-chrome-stable", "google-chrome", "chrome"]
+        }
+        "brave-browser" | "brave-browser-stable" | "brave" => &["brave-browser", "brave"],
+        "vivaldi-stable" | "vivaldi" => &["vivaldi-stable", "vivaldi"],
+        "microsoft-edge" | "microsoft-edge-stable" | "msedge" => {
+            &["microsoft-edge-stable", "microsoft-edge", "msedge"]
+        }
+        _ => return None,
+    };
+
+    candidates
+        .iter()
+        .find(|bin| binary_on_path(bin))
+        .map(|s| s.to_string())
+}
+
+fn binary_on_path(bin: &str) -> bool {
+    Command::new("which")
+        .arg(bin)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 /// Launch a desktop application by name. Tries gtk-launch first (handles

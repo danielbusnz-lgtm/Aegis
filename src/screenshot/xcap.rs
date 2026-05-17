@@ -42,6 +42,51 @@ pub fn capture_for_claude(
     Ok((BASE64.encode(&jpeg), width as u32, height as u32))
 }
 
+/// Fast path: capture + resize + encode in one call. Matches the grim
+/// backend's signature so callers can be backend-agnostic.
+pub fn capture_resized_for_claude(
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    target_w: u32,
+    target_h: u32,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use fast_image_resize::images::Image as FirImage;
+    use fast_image_resize::{
+        FilterType as FirFilterType, PixelType, ResizeAlg, ResizeOptions, Resizer,
+    };
+
+    let monitor = ::xcap::Monitor::from_point(x, y)?;
+    let local_x = (x - monitor.x()?).max(0) as u32;
+    let local_y = (y - monitor.y()?).max(0) as u32;
+    let image = monitor.capture_region(local_x, local_y, width as u32, height as u32)?;
+
+    // xcap gives us an RGBA buffer directly — convert to RGB for the resize.
+    let rgba = image.into_raw();
+    let mut rgb: Vec<u8> = Vec::with_capacity((width * height * 3) as usize);
+    for chunk in rgba.chunks_exact(4) {
+        rgb.push(chunk[0]);
+        rgb.push(chunk[1]);
+        rgb.push(chunk[2]);
+    }
+
+    let fir_src = FirImage::from_vec_u8(width as u32, height as u32, rgb, PixelType::U8x3)?;
+    let mut fir_dst = FirImage::new(target_w, target_h, PixelType::U8x3);
+    let opts = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FirFilterType::Bilinear));
+    let mut resizer = Resizer::new();
+    resizer.resize(&fir_src, &mut fir_dst, &opts)?;
+
+    let mut out: Vec<u8> = Vec::new();
+    JpegEncoder::new_with_quality(&mut out, 85).encode(
+        fir_dst.buffer(),
+        target_w,
+        target_h,
+        image::ExtendedColorType::Rgb8,
+    )?;
+    Ok(BASE64.encode(&out))
+}
+
 /// Pick one of three aspect-matched resolutions Anthropic recommends for
 /// Computer Use. Matching the input's aspect ratio avoids stretching that
 /// degrades coordinate accuracy. Ported from Tabby.

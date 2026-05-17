@@ -23,6 +23,7 @@ const POINT_DURATION: Duration = Duration::from_secs(3);
 
 static CURSOR_SENDER: OnceLock<Sender<(i32, i32)>> = OnceLock::new();
 
+#[derive(Debug)]
 pub enum CursorState {
     Idle,
     Listening,

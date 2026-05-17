@@ -107,13 +107,14 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
             std::thread::spawn(|| -> Result<(i32, i32, u32, u32, String), String> {
                 let (x, y, w, h) =
                     screenshot::active_workspace_geometry().map_err(|e| e.to_string())?;
-                let (orig_b64, _, _) = screenshot::capture_for_claude(x, y, w as i32, h as i32)
-                    .map_err(|e| e.to_string())?;
                 let (declared_w, declared_h) =
                     screenshot::pick_declared_resolution(w as i64, h as i64);
-                let resized_b64 =
-                    screenshot::resize_jpeg_for_computer_use(&orig_b64, declared_w, declared_h)
-                        .map_err(|e| e.to_string())?;
+                // Single-pass capture+resize+encode. Skips the full-res JPEG
+                // round-trip the old two-call path paid (~2-3s on 5K screens).
+                let resized_b64 = screenshot::capture_resized_for_claude(
+                    x, y, w as i32, h as i32, declared_w, declared_h,
+                )
+                .map_err(|e| e.to_string())?;
                 Ok((x, y, w, h, resized_b64))
             });
 
@@ -315,13 +316,23 @@ fn run_one_turn(
     let barge_in_flag_claude = barge_in.flag.clone();
     print!("claude: ");
     rt.block_on(async {
-        let cursor_task = claude.find_action(
+        // Per-iteration screenshot capture, reusing the geometry from the
+        // initial capture. Uses the fast single-pass capture+resize path
+        // so we don't pay for the full-res JPEG round-trip every step.
+        let take_screenshot = move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+            let (dw, dh) = screenshot::pick_declared_resolution(w as i64, h as i64);
+            screenshot::capture_resized_for_claude(x, y, w as i32, h as i32, dw, dh)
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })
+        };
+
+        let cursor_task = claude.run_agent_loop(
             &transcript,
             &resized_b64,
             x as i64,
             y as i64,
             w as i64,
             h as i64,
+            take_screenshot,
             |action| {
                 use crate::providers::claude::Action;
                 eprintln!(
@@ -336,10 +347,6 @@ fn run_one_turn(
                     }
                     Action::Click { x: px, y: py } => {
                         set_cursor_idle();
-                        // Overlay animates on GTK thread; click_at enqueues
-                        // to the input executor. Both kick off the same
-                        // instant so the visual cursor landing and the real
-                        // click look simultaneous.
                         cursor::point_at(px as i32, py as i32);
                         crate::actions::click_at(px, py);
                     }
@@ -446,9 +453,15 @@ fn run_one_turn(
     })
     .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    // Safety net: ensure we always return to Idle even if neither the cursor
-    // callback nor the first-PCM-chunk path fired (barge-in, errors, no-op turns).
-    set_cursor_idle();
+    // Safety net: return to Idle if neither the cursor callback nor the
+    // first-PCM-chunk path fired (errors, no-op turns). EXCEPTION: if the
+    // user is currently pressing the hotkey, they've already queued a
+    // Listening message via on_press for the next turn — firing Idle here
+    // would clobber it on the cursor's drain loop ("latest wins"), and
+    // the soundwave would never render.
+    if !hotkey::is_recording() {
+        set_cursor_idle();
+    }
 
     Ok(())
 }
