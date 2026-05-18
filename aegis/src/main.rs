@@ -17,12 +17,12 @@ fn main() {
     // TCP connection, and there's no per-call handshake cost after the first.
     let http = reqwest::Client::new();
 
-    let stt = providers::stt_deepgram::SttDeepgram::from_env(http.clone())
-        .expect("STT init failed");
+    let stt =
+        providers::stt_deepgram::SttDeepgram::from_env(http.clone()).expect("STT init failed");
     let claude =
         providers::claude::Claude::from_env(http.clone()).expect("Claude provider init failed");
-    let cartesia = providers::tts_cartesia::TtsCartesia::from_env(http)
-        .expect("missing CARTESIA_API_KEY");
+    let cartesia =
+        providers::tts_cartesia::TtsCartesia::from_env(http).expect("missing CARTESIA_API_KEY");
     let mic = audio::Mic::init();
     actions::init_input_executor();
     actions::check_input_injection_available();

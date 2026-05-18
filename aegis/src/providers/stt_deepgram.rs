@@ -52,6 +52,18 @@ impl SttDeepgram {
         })
     }
 
+    /// Pre-open the HTTPS connection to api.deepgram.com so the first
+    /// real STT session doesn't pay TLS handshake cost. (The WebSocket
+    /// upgrade for /v1/listen reuses the same TLS session.)
+    pub async fn warm(&self) {
+        let _ = self
+            .http
+            .get("https://api.deepgram.com/v1/projects")
+            .header("Authorization", "Token warm")
+            .send()
+            .await;
+    }
+
     /// Build the `Authorization` header value for the Deepgram WebSocket.
     /// In direct mode the API key is used as-is with a `Token` prefix.
     /// In proxy mode we POST to aegis-proxy for a short-lived JWT and use

@@ -5,7 +5,7 @@
 //! ```ignore
 //! pub fn is_available() -> bool;
 //! pub fn tools() -> Vec<serde_json::Value>;
-//! pub fn dispatch(name: &str, input: &serde_json::Value) -> bool;
+//! pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String>;
 //! ```
 //!
 //! No trait, no dyn dispatch — convention covers it for a hand-edited list
@@ -13,11 +13,19 @@
 //! `src/integrations/discord.rs` and add two lines to `all_tools` and
 //! `dispatch` below. That's the entire onboarding cost.
 //!
+//! `dispatch` returns `None` if this integration does not own the named tool,
+//! or `Some(result_json)` if it does. Fire-and-forget tools return
+//! `Some("{}")`.  Data-returning tools (search, read, count) return a
+//! meaningful JSON string that the agent loop surfaces to Claude as the
+//! tool_result content.
+//!
 //! An integration's `is_available()` returning false hides its tools
 //! entirely from Claude's tools array — so Claude can't try to call a
 //! Spotify tool if spotify_player isn't installed. No "tool failed at
 //! runtime" surprises.
 
+pub mod github;
+pub mod gmail;
 pub mod spotify;
 pub mod youtube;
 
@@ -31,19 +39,30 @@ pub fn all_tools() -> Vec<serde_json::Value> {
     if youtube::is_available() {
         tools.extend(youtube::tools());
     }
+    if gmail::is_available() {
+        tools.extend(gmail::tools());
+    }
+    if github::is_available() {
+        tools.extend(github::tools());
+    }
     tools
 }
 
 /// Try to dispatch a tool call to whichever integration owns it. Returns
-/// true if some integration handled the call (regardless of whether the
-/// underlying command succeeded), false if no integration recognized the
-/// tool name — caller logs the unknown name.
-pub fn dispatch(name: &str, input: &serde_json::Value) -> bool {
-    if spotify::dispatch(name, input) {
-        return true;
+/// `None` if no integration recognized the tool name (caller logs the
+/// unknown name), or `Some(result_json)` if an integration handled it.
+pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
+    if let Some(result) = spotify::dispatch(name, input) {
+        return Some(result);
     }
-    if youtube::dispatch(name, input) {
-        return true;
+    if let Some(result) = youtube::dispatch(name, input) {
+        return Some(result);
     }
-    false
+    if let Some(result) = gmail::dispatch(name, input) {
+        return Some(result);
+    }
+    if let Some(result) = github::dispatch(name, input) {
+        return Some(result);
+    }
+    None
 }

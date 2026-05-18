@@ -16,6 +16,35 @@ fn set_cursor_idle() {
 #[cfg(not(feature = "hyprland"))]
 fn set_cursor_idle() {}
 
+/// True when the transcript clearly points at an integration tool (Gmail,
+/// GitHub, Spotify) rather than something visual on screen. Used to skip
+/// the initial-screenshot upload on step 1 (cuts ~700ms off integration
+/// queries). Substring match against a hardcoded keyword list. Same risk
+/// of phrasing drift as the other heuristics — if it misses, we just keep
+/// the screenshot attached and the query still works.
+fn is_integration_intent(transcript: &str) -> bool {
+    let padded = format!(" {} ", transcript.trim().to_lowercase());
+    const KEYWORDS: &[&str] = &[
+        " mail",
+        " email",
+        " inbox",
+        " unread",
+        " pr ",
+        " prs",
+        " pull request",
+        " issue",
+        " issues",
+        " notification",
+        " github",
+        " repo",
+        " spotify",
+        " song",
+        " track",
+        " playlist",
+    ];
+    KEYWORDS.iter().any(|k| padded.contains(k))
+}
+
 /// Returns true if the user's query expects a spoken description from Claude.
 /// False for "just do X" commands — pointing AND action verbs — where the
 /// effect (cursor flying, browser opening, app launching) is the response
@@ -49,6 +78,35 @@ fn wants_description(transcript: &str) -> bool {
         .trim_start_matches("let's ")
         .trim_start_matches("lets ")
         .trim_start_matches("just ");
+
+    // Integration-domain queries ALWAYS want spoken answers; the API result
+    // is prose Claude composes from JSON. "Open up my issues" matches the
+    // "open " action prefix below but is really "tell me my issues" — so
+    // short-circuit on these keywords before the action match runs.
+    let integration_keywords = [
+        " mail",
+        " email",
+        " inbox",
+        " messages",
+        " unread",
+        " pr ",
+        " prs",
+        " pull request",
+        " pull requests",
+        " issue",
+        " issues",
+        " notification",
+        " notifications",
+        " ci ",
+        " actions ",
+        " github",
+        " repo ",
+        " repos",
+    ];
+    let padded = format!(" {stripped} ");
+    if integration_keywords.iter().any(|k| padded.contains(k)) {
+        return true;
+    }
 
     // Phrases that are unambiguously commands, not questions. Pointing verbs
     // ("where is X", "click X") and action verbs ("open X", "launch X",
@@ -88,6 +146,16 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
     // Tokio runtime owned by this thread. Streaming providers (Deepgram WS,
     // Claude SSE, Cartesia SSE) all run via `rt.block_on(...)`.
     let rt = tokio::runtime::Runtime::new().expect("failed to start tokio runtime");
+
+    // Pre-open HTTPS pools to Claude, Deepgram, and Cartesia so the first
+    // voice turn doesn't pay TCP+TLS handshake cost. Each warm() fires a
+    // fast-failing request on this runtime; the connection stays in the
+    // pool for the real call.
+    let t_warm = std::time::Instant::now();
+    rt.block_on(async {
+        let _ = tokio::join!(claude.warm(), stt.warm(), cartesia.warm());
+    });
+    eprintln!("[warmup] HTTP pools primed in {:?}", t_warm.elapsed());
 
     // Warm up cpal once on this thread (cpal::Stream is !Send). The stream
     // runs forever; per-turn we just install a sender to start forwarding.
@@ -147,9 +215,7 @@ fn run_one_turn(
     stt: &SttDeepgram,
     claude: &Claude,
     cartesia: &TtsCartesia,
-    screenshot_handle: std::thread::JoinHandle<
-        Result<(i32, i32, u32, u32, String), String>,
-    >,
+    screenshot_handle: std::thread::JoinHandle<Result<(i32, i32, u32, u32, String), String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up audio streaming: cpal callback writes i16 chunks into a tokio
     // channel; Deepgram WS consumes them and returns the final transcript
@@ -300,26 +366,25 @@ fn run_one_turn(
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     });
 
-    // `voice_task` is `async move` so it owns and drops `sentence_tx` at its
-    // end, signalling the TTS task to wind down. That move conflicts with
-    // `cursor_task`'s borrow of `transcript`, so clone the small string.
-    let transcript_for_voice = transcript.clone();
-
-    // Decide whether to spend a second Claude call on a spoken description.
-    // Unambiguous "where is X?" / "click X" style queries don't need one —
-    // the cursor pointing IS the answer. Skipping cuts ~1s off perceived
-    // latency for those queries.
-    let want_desc = wants_description(&transcript);
+    // Whether the user's query expects a spoken answer at all. Point-and-click
+    // style queries ("click X", "where is Y") get silent action; everything
+    // else gets TTS of the agent loop's final text.
+    let want_speech = wants_description(&transcript);
+    // For clear integration-tool queries, skip uploading the screenshot on
+    // step 1. Claude doesn't need pixels to decide on gmail_search /
+    // gh_my_issues / spotify_play. Saves ~700ms of HTTP body upload.
+    let skip_initial_screenshot = is_integration_intent(&transcript);
     eprintln!(
-        "[query] {} → describe={}",
+        "[query] {} → speak={} skip_screenshot={}",
         transcript.trim(),
-        want_desc
+        want_speech,
+        skip_initial_screenshot
     );
-
-    // Both Claude calls now share the same resized image. find_action still
-    // borrows resized_b64 directly; voice_task is `async move` so it needs
-    // its own copy. Clone is ~226KB, happens once per turn.
-    let resized_b64_for_voice = resized_b64.clone();
+    let initial_screenshot: &str = if skip_initial_screenshot {
+        ""
+    } else {
+        resized_b64.as_str()
+    };
 
     let barge_in_flag_claude = barge_in.flag.clone();
     print!("claude: ");
@@ -329,29 +394,50 @@ fn run_one_turn(
         // and workspace switches mid-chain. Falls back to the initial
         // (x, y, w, h) if hyprctl fails. Uses the fast single-pass
         // capture+resize path.
-        let take_screenshot = move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-            let (cx, cy, cw, ch) = screenshot::active_workspace_geometry()
-                .map(|g| (g.0, g.1, g.2 as i32, g.3 as i32))
-                .unwrap_or((x, y, w as i32, h as i32));
-            let (dw, dh) = screenshot::pick_declared_resolution(cw as i64, ch as i64);
-            screenshot::capture_resized_for_claude(cx, cy, cw, ch, dw, dh)
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })
-        };
+        let take_screenshot =
+            move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+                let (cx, cy, cw, ch) = screenshot::active_workspace_geometry()
+                    .map(|g| (g.0, g.1, g.2 as i32, g.3 as i32))
+                    .unwrap_or((x, y, w as i32, h as i32));
+                let (dw, dh) = screenshot::pick_declared_resolution(cw as i64, ch as i64);
+                screenshot::capture_resized_for_claude(cx, cy, cw, ch, dw, dh).map_err(
+                    |e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() },
+                )
+            };
 
         let running_apps = crate::actions::list_running_apps();
         eprintln!(
             "[agent-loop] running apps detected: {}",
-            if running_apps.is_empty() { "(none)".to_string() } else { running_apps.join(", ") }
+            if running_apps.is_empty() {
+                "(none)".to_string()
+            } else {
+                running_apps.join(", ")
+            }
         );
+
+        // Streaming token-to-TTS state. When the agent loop fires
+        // on_text_delta during a stream-safe step, we accumulate into
+        // tts_buf and push complete sentences to sentence_tx as soon as a
+        // boundary forms. did_stream tracks whether ANY tokens streamed,
+        // so the post-await branch knows whether to also split final_text
+        // or just flush the tail.
+        let tts_buf: std::rc::Rc<std::cell::RefCell<String>> =
+            std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+        let did_stream = std::rc::Rc::new(std::cell::Cell::new(false));
+        let tts_buf_for_cb = tts_buf.clone();
+        let did_stream_for_cb = did_stream.clone();
+        let sentence_tx_for_cb = sentence_tx.clone();
+        let stream_to_tts = want_speech;
 
         let cursor_task = claude.run_agent_loop(
             &transcript,
-            &resized_b64,
+            initial_screenshot,
             &running_apps,
             x as i64,
             y as i64,
             w as i64,
             h as i64,
+            crate::integrations::all_tools(),
             take_screenshot,
             |action| {
                 use crate::providers::claude::Action;
@@ -391,71 +477,93 @@ fn run_one_turn(
                         set_cursor_idle();
                         crate::actions::switch_to_window(&target);
                     }
-                    Action::Integration { name, input } => {
-                        set_cursor_idle();
-                        if !crate::integrations::dispatch(&name, &input) {
-                            eprintln!(
-                                "[integration] no handler for tool '{}' input={}",
-                                name, input
-                            );
-                        }
-                    }
+                    // Integration tools are NOT dispatched here; run_agent_loop
+                    // handles them post-stream via dispatch_integration so their
+                    // return values reach Claude as tool_result content.
+                    Action::Integration { .. } => {}
+                }
+            },
+            |name, input| {
+                let result = crate::integrations::dispatch(name, input);
+                if result.is_none() {
+                    eprintln!("[integration] no handler for tool '{name}'");
+                }
+                result
+            },
+            move |delta: &str| {
+                // Only stream to TTS if the user expects spoken output.
+                if !stream_to_tts {
+                    return;
+                }
+                did_stream_for_cb.set(true);
+                let mut buf = tts_buf_for_cb.borrow_mut();
+                buf.push_str(delta);
+                while let Some(end) = find_sentence_end(&buf) {
+                    let sentence: String = buf.drain(..=end).collect();
+                    let _ = sentence_tx_for_cb.send(sentence);
                 }
             },
         );
 
-        let voice_task = async move {
-            if !want_desc {
-                eprintln!("[timing] skipping describe (point-only query)");
-                // Drop sentence_tx so tts_task's recv() returns None and it
-                // winds down without speaking anything.
-                drop(sentence_tx);
-                return Ok::<String, Box<dyn std::error::Error + Send + Sync>>(String::new());
-            }
-            let mut sentence_buf = String::new();
-            let mut first_token_logged = false;
-            let result = claude
-                .describe_with_image(&transcript_for_voice, &resized_b64_for_voice, |token| {
-                    if !first_token_logged {
-                        eprintln!(
-                            "[timing] first Claude text token → {:?}",
-                            release_t.elapsed()
-                        );
-                        first_token_logged = true;
-                    }
-                    print!("{}", token);
-                    use std::io::Write;
-                    std::io::stdout().flush().ok();
-
-                    sentence_buf.push_str(token);
-                    while let Some(end) = find_sentence_end(&sentence_buf) {
-                        let sentence: String = sentence_buf.drain(..=end).collect();
-                        let _ = sentence_tx.send(sentence);
-                    }
-                })
-                .await;
-            // Flush any tail that didn't hit a sentence boundary.
-            let tail = sentence_buf.trim();
-            if !tail.is_empty() {
-                let _ = sentence_tx.send(tail.to_string());
-            }
-            eprintln!("[timing] claude full text done → {:?}", release_t.elapsed());
-            // sentence_tx drops here → tts_task's recv() returns None.
-            result
-        };
-
-        // Race the Claude work against a barge-in signal. If a new press
-        // arrives, drop both futures (which cancels their HTTP streams).
+        // Race the agent loop against a barge-in signal. If a new press
+        // arrives, drop the future (cancels its HTTP streams).
         tokio::select! {
             biased;
             _ = wait_for_barge_in(&barge_in_flag_claude) => {
                 eprintln!("[barge-in] claude aborted at {:?}", release_t.elapsed());
+                drop(sentence_tx);
             }
-            joined = async {
-                tokio::join!(cursor_task, voice_task)
-            } => {
-                let (_, voice_res) = joined;
-                voice_res?;
+            result = cursor_task => {
+                match result {
+                    Ok(final_text) => {
+                        eprintln!(
+                            "[timing] agent loop final text ready ({} chars, streamed={}) → {:?}",
+                            final_text.len(),
+                            did_stream.get(),
+                            release_t.elapsed()
+                        );
+                        print!("{final_text}");
+                        use std::io::Write;
+                        std::io::stdout().flush().ok();
+                        if want_speech && !final_text.trim().is_empty() {
+                            if did_stream.get() {
+                                // Streaming was active. Sentences already
+                                // flowed to TTS as Claude produced them.
+                                // Just flush the tail (partial sentence
+                                // with no terminator).
+                                let tail = tts_buf.borrow().trim().to_string();
+                                if !tail.is_empty() {
+                                    let _ = sentence_tx.send(tail);
+                                }
+                            } else {
+                                // No streaming happened (e.g., first-step
+                                // text-only answer like "what's on screen?").
+                                // Fall back to post-hoc sentence split.
+                                let mut buf = String::new();
+                                for ch in final_text.chars() {
+                                    buf.push(ch);
+                                    while let Some(end) = find_sentence_end(&buf) {
+                                        let sentence: String =
+                                            buf.drain(..=end).collect();
+                                        let _ = sentence_tx.send(sentence);
+                                    }
+                                }
+                                let tail = buf.trim();
+                                if !tail.is_empty() {
+                                    let _ = sentence_tx.send(tail.to_string());
+                                }
+                            }
+                        }
+                        // Drop tx so tts_task's recv() returns None and winds
+                        // down. If want_speech=false this drops with nothing
+                        // queued and tts_task exits silently.
+                        drop(sentence_tx);
+                    }
+                    Err(e) => {
+                        eprintln!("[agent-loop] failed: {e}");
+                        drop(sentence_tx);
+                    }
+                }
             }
         }
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())

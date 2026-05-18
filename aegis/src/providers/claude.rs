@@ -54,6 +54,24 @@ pub struct Claude {
     pub auth: (String, String),
 }
 
+impl Claude {
+    /// Open the HTTPS connection to our endpoint so the first real voice
+    /// turn doesn't pay TLS handshake cost. Fires a deliberately-malformed
+    /// request that fast-fails on the server; the TCP+TLS handshake leaves
+    /// a warm connection in reqwest's pool. Response is discarded.
+    pub async fn warm(&self) {
+        let _ = self
+            .http
+            .post(&self.endpoint)
+            .header(&self.auth.0, &self.auth.1)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .body("{}")
+            .send()
+            .await;
+    }
+}
+
 /// Default endpoint for the hosted proxy. Override at compile time by setting
 /// `AEGIS_PROXY_URL` to a different worker URL if you deploy your own.
 const PROXY_URL: &str = "https://aegis-proxy.danielbusnz.workers.dev/v1/anthropic/messages";
@@ -297,9 +315,8 @@ impl Claude {
                     match event["type"].as_str() {
                         Some("content_block_start") => {
                             if event["content_block"]["type"].as_str() == Some("tool_use") {
-                                current_tool_name = event["content_block"]["name"]
-                                    .as_str()
-                                    .map(str::to_string);
+                                current_tool_name =
+                                    event["content_block"]["name"].as_str().map(str::to_string);
                                 tool_json_buffer.clear();
                             } else {
                                 current_tool_name = None;
@@ -490,7 +507,7 @@ impl Claude {
     /// later. For now voice.rs still runs describe in parallel and the
     /// returned text is informational only.
     #[allow(clippy::too_many_arguments)]
-    pub async fn run_agent_loop<F, S>(
+    pub async fn run_agent_loop<F, S, D, T>(
         &self,
         prompt: &str,
         initial_screenshot_b64: &str,
@@ -499,12 +516,17 @@ impl Claude {
         window_y: i64,
         window_width: i64,
         window_height: i64,
+        integration_tools: Vec<serde_json::Value>,
         mut take_screenshot: S,
         mut on_action: F,
+        mut dispatch_integration: D,
+        mut on_text_delta: T,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
     where
         F: FnMut(Action),
         S: FnMut() -> Result<String, Box<dyn std::error::Error + Send + Sync>>,
+        D: FnMut(&str, &serde_json::Value) -> Option<String>,
+        T: FnMut(&str),
     {
         const MAX_STEPS: usize = 10;
         const SETTLE_MS: u64 = 600;
@@ -523,15 +545,22 @@ impl Claude {
              Currently-running app window classes (from Hyprland): {}.\n\n\
              Tool preference order for actions targeting an app:\n\
              1. SERVICE-SPECIFIC INTEGRATION TOOLS FIRST (e.g. spotify_play, \
-                spotify_pause). These are dramatically faster than visual \
-                automation — one tool call vs. 5-10 steps of click+type. \
-                Use them whenever the user's intent matches.\n\
+                spotify_pause, gmail_search, gmail_read, gmail_send, \
+                gmail_unread_count). These let you access the service's \
+                data and actions directly via API, regardless of what is \
+                visible on screen. Dramatically faster than visual \
+                automation: one tool call vs. 5-10 steps of click+type. \
+                If a gmail_ or spotify_ tool exists for what the user is \
+                asking for, USE IT, even if the screen shows something \
+                unrelated like a terminal. Do NOT tell the user you cannot \
+                access their email/music when these tools are available; \
+                just call the tool.\n\
              2. If no integration tool exists and the target app IS in the \
                 running list above, prefer switch_to_window to focus it and \
                 interact via click+type.\n\
              3. If no integration tool exists and the app is NOT running, \
                 use launch_app to start it (or open_url for web services).\n\
-             4. open_url is for pure web destinations — sites without a \
+             4. open_url is for pure web destinations: sites without a \
                 desktop app, or when the user explicitly says \"in the browser\".\n\n\
              Pick the best action(s) and invoke their tools. If the request \
              needs multiple steps, call multiple tools across iterations — \
@@ -540,15 +569,32 @@ impl Claude {
              the chain.",
             prompt, running_list
         );
+        // Build initial user content. Skip the image block when no screenshot
+        // was passed in (integration-keyword queries don't need vision and
+        // benefit from a much smaller request body).
+        let mut initial_content: Vec<serde_json::Value> = vec![];
+        if !initial_screenshot_b64.is_empty() {
+            initial_content.push(serde_json::json!({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": initial_screenshot_b64,
+                },
+            }));
+        }
+        initial_content.push(serde_json::json!({ "type": "text", "text": user_prompt }));
         let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({
             "role": "user",
-            "content": [
-                { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": initial_screenshot_b64 } },
-                { "type": "text", "text": user_prompt }
-            ]
+            "content": initial_content,
         })];
 
         let mut final_text = String::new();
+        // When the previous step had only integration tool calls, we expect
+        // this step to be a text-only summary (no tools). Stream text
+        // tokens to the caller via on_text_delta so TTS can start speaking
+        // before the full response is collected.
+        let mut prev_step_was_integration_only = false;
 
         for step in 0..MAX_STEPS {
             let t_step_start = std::time::Instant::now();
@@ -565,7 +611,7 @@ impl Claude {
                 "max_tokens": 1024,
                 "stream": true,
                 "system": system_prompt_for_actions(),
-                "tools": tools_array_value(declared_w, declared_h),
+                "tools": tools_array_value(declared_w, declared_h, integration_tools.clone()),
                 "messages": messages,
             });
             let body_size_kb = serde_json::to_vec(&body)
@@ -631,14 +677,20 @@ impl Claude {
                 while let Some(idx) = buffer.find("\n\n") {
                     let frame: String = buffer.drain(..idx + 2).collect();
                     for line in frame.lines() {
-                        let Some(data) = line.strip_prefix("data: ") else { continue; };
-                        let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else { continue; };
+                        let Some(data) = line.strip_prefix("data: ") else {
+                            continue;
+                        };
+                        let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else {
+                            continue;
+                        };
 
                         match event["type"].as_str() {
                             Some("content_block_start") => {
                                 if event["content_block"]["type"].as_str() == Some("tool_use") {
-                                    current_tool_name = event["content_block"]["name"].as_str().map(str::to_string);
-                                    current_tool_id = event["content_block"]["id"].as_str().map(str::to_string);
+                                    current_tool_name =
+                                        event["content_block"]["name"].as_str().map(str::to_string);
+                                    current_tool_id =
+                                        event["content_block"]["id"].as_str().map(str::to_string);
                                     tool_json_buffer.clear();
                                 } else {
                                     current_tool_name = None;
@@ -654,6 +706,9 @@ impl Claude {
                                 } else if delta_type == Some("text_delta") {
                                     if let Some(t) = event["delta"]["text"].as_str() {
                                         text_content.push_str(t);
+                                        if prev_step_was_integration_only {
+                                            on_text_delta(t);
+                                        }
                                     }
                                 }
                             }
@@ -663,22 +718,33 @@ impl Claude {
                                 {
                                     if !tool_json_buffer.is_empty() {
                                         let input_json = tool_json_buffer.clone();
-                                        if let Ok(input) = serde_json::from_str::<serde_json::Value>(&input_json) {
-                                            if let Some(action) = parse_tool_call(
-                                                &name, &input, declared_w, declared_h,
-                                                window_x, window_y, window_width, window_height,
+                                        if let Ok(input) =
+                                            serde_json::from_str::<serde_json::Value>(&input_json)
+                                        {
+                                            match parse_tool_call(
+                                                &name,
+                                                &input,
+                                                declared_w,
+                                                declared_h,
+                                                window_x,
+                                                window_y,
+                                                window_width,
+                                                window_height,
                                             ) {
-                                                on_action(action);
-                                            } else {
-                                                // No dispatch (e.g. computer.screenshot/key/scroll/wait/cursor_position).
-                                                // Log so we can see what's eating the silent steps.
-                                                let action_field = input["action"]
-                                                    .as_str()
-                                                    .unwrap_or("(none)");
-                                                eprintln!(
-                                                    "[agent-loop] unhandled tool '{}' action='{}' input={}",
-                                                    name, action_field, input_json
-                                                );
+                                                // Integration tools are dispatched post-stream
+                                                // so their text results can feed back to Claude
+                                                // as tool_result content. Skip on_action here.
+                                                Some(Action::Integration { .. }) => {}
+                                                Some(action) => on_action(action),
+                                                None => {
+                                                    let action_field = input["action"]
+                                                        .as_str()
+                                                        .unwrap_or("(none)");
+                                                    eprintln!(
+                                                        "[agent-loop] unhandled tool '{}' action='{}' input={}",
+                                                        name, action_field, input_json
+                                                    );
+                                                }
                                             }
                                             tool_calls.push((id, name, input_json));
                                         }
@@ -736,47 +802,117 @@ impl Claude {
                 t_append.elapsed()
             );
 
-            // Settle: let UI react to the actions before taking the next screenshot.
-            let t_settle = std::time::Instant::now();
-            tokio::time::sleep(Duration::from_millis(SETTLE_MS)).await;
-            eprintln!(
-                "[agent-loop] step {} settle ({}ms) → {:?} actual",
-                step + 1,
-                SETTLE_MS,
-                t_settle.elapsed()
-            );
-
-            // Capture fresh screenshot for the next iteration's tool_result.
-            let t_shot = std::time::Instant::now();
-            let new_screenshot = take_screenshot()?;
-            eprintln!(
-                "[agent-loop] step {} screenshot captured ({} KB) in {:?}",
-                step + 1,
-                new_screenshot.len() / 1024,
-                t_shot.elapsed()
-            );
-
-            // Append tool_results — one per tool_use_id, each with the same
-            // post-action screenshot (Claude needs to see what changed).
+            // Dispatch integration tools first so we know whether the post-step
+            // screenshot is even needed. Non-integration tools (computer,
+            // open_url, etc.) already fired via on_action during streaming.
             let t_tail = std::time::Instant::now();
+            let mut integration_results: std::collections::HashMap<String, String> =
+                std::collections::HashMap::new();
+            for (id, name, input_json) in &tool_calls {
+                let Ok(input) = serde_json::from_str::<serde_json::Value>(input_json) else {
+                    continue;
+                };
+                let t_disp = std::time::Instant::now();
+                eprintln!(
+                    "[tool-call] step {} dispatch '{}' input={}",
+                    step + 1,
+                    name,
+                    input_json
+                );
+                if let Some(result) = dispatch_integration(name, &input) {
+                    let preview: String = result.chars().take(120).collect();
+                    eprintln!(
+                        "[tool-call] step {} '{}' returned {} chars in {:?} | preview: {}{}",
+                        step + 1,
+                        name,
+                        result.len(),
+                        t_disp.elapsed(),
+                        preview,
+                        if result.len() > 120 { "..." } else { "" }
+                    );
+                    integration_results.insert(id.clone(), result);
+                } else {
+                    eprintln!(
+                        "[tool-call] step {} '{}' was NOT an integration (handled elsewhere) in {:?}",
+                        step + 1,
+                        name,
+                        t_disp.elapsed()
+                    );
+                }
+            }
+
+            // If every tool this step was an integration tool, the screen
+            // didn't change. Skip settle + screenshot capture and reuse the
+            // last screenshot string for tool_result fallback (it won't
+            // actually be referenced since all results are text).
+            let all_integration = !tool_calls.is_empty()
+                && tool_calls
+                    .iter()
+                    .all(|(id, _, _)| integration_results.contains_key(id));
+
+            let new_screenshot: String = if all_integration {
+                eprintln!(
+                    "[agent-loop] step {} skipped settle + screenshot (all integration tools)",
+                    step + 1
+                );
+                String::new()
+            } else {
+                let t_settle = std::time::Instant::now();
+                tokio::time::sleep(Duration::from_millis(SETTLE_MS)).await;
+                eprintln!(
+                    "[agent-loop] step {} settle ({}ms) → {:?} actual",
+                    step + 1,
+                    SETTLE_MS,
+                    t_settle.elapsed()
+                );
+                let t_shot = std::time::Instant::now();
+                let shot = take_screenshot()?;
+                eprintln!(
+                    "[agent-loop] step {} screenshot captured ({} KB) in {:?}",
+                    step + 1,
+                    shot.len() / 1024,
+                    t_shot.elapsed()
+                );
+                shot
+            };
+
+            // Append tool_results. Integration tools get their text result;
+            // all other tools get the post-action screenshot so Claude can
+            // see what changed on screen.
             let tool_results: Vec<serde_json::Value> = tool_calls
                 .iter()
                 .map(|(id, _, _)| {
-                    serde_json::json!({
-                        "type": "tool_result",
-                        "tool_use_id": id,
-                        "content": [
-                            { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": new_screenshot } }
-                        ]
-                    })
+                    if let Some(text) = integration_results.get(id) {
+                        serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": id,
+                            "content": text,
+                        })
+                    } else {
+                        serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": id,
+                            "content": [
+                                { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": new_screenshot } }
+                            ]
+                        })
+                    }
                 })
                 .collect();
             messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
 
             // Linear token cost grows fast if we ship every screenshot
-            // forever — strip image data from older tool_results, keeping
-            // only the N most recent.
-            trim_old_screenshots(&mut messages, KEEP_RECENT_SCREENSHOTS);
+            // forever. Strip image data from older tool_results, keeping
+            // only the N most recent. After an integration-only step the
+            // visual context is dead weight (Claude is working with API
+            // results, not pixels), so drop ALL prior screenshots in that
+            // case. Cuts subsequent request size from ~270KB to a few KB.
+            let keep = if all_integration { 0 } else { KEEP_RECENT_SCREENSHOTS };
+            trim_old_screenshots(&mut messages, keep);
+
+            // Heuristic for "next step is the text-only final answer":
+            // this step had tools, and they were all integrations.
+            prev_step_was_integration_only = all_integration;
             eprintln!(
                 "[agent-loop] step {} tool_result + trim in {:?}",
                 step + 1,
@@ -799,6 +935,36 @@ impl Claude {
 /// const-eval rules around multi-line raw strings.
 fn system_prompt_for_actions() -> &'static str {
     "You are a desktop voice-assistant action dispatcher.\n\n\
+     CRITICAL: NEVER hedge or apologize for limitations. If a tool exists \
+     for what the user asked, just call it. SPECIFICALLY:\n\
+     - NEVER say \"I don't have the ability to...\", \"I can't access...\", \
+       \"You'd need to open...\", \"I can only see...\", or similar refusals \
+       when a matching integration tool exists (gmail_*, spotify_*, etc.). \
+       The presence of the tool in the tools array MEANS you have that \
+       ability. Use it.\n\
+     - NEVER narrate before calling a tool. Do not write 'I'm opening that \
+       up for you' or 'Let me check that' as prefix text. Just call the \
+       tool. The text you emit is spoken aloud by TTS; every word delays \
+       the user's experience.\n\
+     - The user's email is Gmail. ANY reference to email, mail, inbox, \
+       messages from someone, sending a message to someone, or unread \
+       count maps to Gmail. Never ask 'which email service?' or interpret \
+       'email' as anything other than Gmail.\n\
+     - For 'read my emails' / 'do I have mail' / 'send a message': call \
+       gmail_search, gmail_read, gmail_unread_count, gmail_send directly. \
+       Do not check the screen first.\n\
+     - For 'play X' / 'pause music' / 'next song': call spotify_* directly.\n\
+     - For 'show me my PRs' / 'do I have open issues' / 'is CI passing' / \
+       'any GitHub notifications': call gh_my_prs, gh_my_issues, \
+       gh_actions_status, gh_notifications directly. Do not browse to \
+       github.com.\n\
+     - Text content is ONLY for the FINAL answer back to the user (the \
+       last step in the chain), after all tools have returned data.\n\
+     - VOICE BREVITY: the final answer is spoken aloud, not read. Keep it \
+       UNDER 100 words. For lists, give the top 3-5 items plus a 'you have \
+       N total, want details on any?' summary — do NOT enumerate every \
+       item. The user is listening; respect their time. If they want more, \
+       they'll ask.\n\n\
      CRITICAL: NEVER call action=\"screenshot\" on the computer tool. \
      A fresh screenshot of the user's screen is ALREADY attached to \
      this message, and after every tool_result a new screenshot will be \
@@ -877,11 +1043,14 @@ fn system_prompt_for_actions() -> &'static str {
      no explanation."
 }
 
-/// Shared tools array used by both single-call and loop entry points.
-/// Appends any tools exposed by ready integrations (spotify, etc.) at
-/// the end of the array so Claude can call them when the user's intent
-/// matches.
-fn tools_array_value(declared_w: u32, declared_h: u32) -> serde_json::Value {
+/// Shared tools array for the agent loop. Accepts extra tool schemas
+/// (from integrations, etc.) to append so the function doesn't need to
+/// import the integrations module directly.
+fn tools_array_value(
+    declared_w: u32,
+    declared_h: u32,
+    extra_tools: Vec<serde_json::Value>,
+) -> serde_json::Value {
     let mut tools: Vec<serde_json::Value> = serde_json::json!([
         {
             "type": "computer_20250124",
@@ -935,7 +1104,7 @@ fn tools_array_value(declared_w: u32, declared_h: u32) -> serde_json::Value {
     .expect("tools literal must be an array")
     .clone();
 
-    tools.extend(crate::integrations::all_tools());
+    tools.extend(extra_tools);
     serde_json::Value::Array(tools)
 }
 
@@ -944,16 +1113,20 @@ fn tools_array_value(declared_w: u32, declared_h: u32) -> serde_json::Value {
 /// so Claude knows there WAS a screenshot at that point, but the bytes
 /// are gone. Keeps the conversation graph intact while controlling cost.
 fn trim_old_screenshots(messages: &mut [serde_json::Value], keep_last_n: usize) {
-    let placeholder = || serde_json::json!({
-        "type": "text",
-        "text": "[older screenshot omitted]"
-    });
+    let placeholder = || {
+        serde_json::json!({
+            "type": "text",
+            "text": "[older screenshot omitted]"
+        })
+    };
     let mut seen = 0usize;
     for msg in messages.iter_mut().rev() {
         if msg["role"] != "user" {
             continue;
         }
-        let Some(content) = msg["content"].as_array_mut() else { continue; };
+        let Some(content) = msg["content"].as_array_mut() else {
+            continue;
+        };
         for block in content.iter_mut() {
             // Two image shapes show up in user messages:
             //   1. Direct image block on the initial transcript turn:
@@ -975,7 +1148,9 @@ fn trim_old_screenshots(messages: &mut [serde_json::Value], keep_last_n: usize) 
             if block["type"] != "tool_result" {
                 continue;
             }
-            let Some(inner) = block["content"].as_array_mut() else { continue; };
+            let Some(inner) = block["content"].as_array_mut() else {
+                continue;
+            };
             for item in inner.iter_mut() {
                 if item["type"] == "image" {
                     if seen < keep_last_n {
@@ -1013,9 +1188,10 @@ fn parse_tool_call(
         "computer" => (input["action"].as_str()?.to_string(), input),
         // The action-as-name fallback. Coordinate / text comes straight
         // from input without an `action` field.
-        "left_click" | "right_click" | "middle_click" | "double_click"
-        | "triple_click" | "mouse_move" | "type" | "key" | "scroll"
-        | "screenshot" | "wait" | "cursor_position" => (tool_name.to_string(), input),
+        "left_click" | "right_click" | "middle_click" | "double_click" | "triple_click"
+        | "mouse_move" | "type" | "key" | "scroll" | "screenshot" | "wait" | "cursor_position" => {
+            (tool_name.to_string(), input)
+        }
         // Custom tools handled below.
         _ => return parse_custom_tool(tool_name, input),
     };
@@ -1067,8 +1243,9 @@ fn parse_tool_call(
         // most apps treat them similarly for the "I want to interact with
         // THIS element" case. We can add separate Action variants if a
         // real use case appears.
-        "left_click" | "right_click" | "middle_click" | "double_click"
-        | "triple_click" => Some(Action::Click { x, y }),
+        "left_click" | "right_click" | "middle_click" | "double_click" | "triple_click" => {
+            Some(Action::Click { x, y })
+        }
         "mouse_move" => Some(Action::Point { x, y }),
         _ => None,
     }
@@ -1108,9 +1285,9 @@ fn parse_custom_tool(tool_name: &str, input: &serde_json::Value) -> Option<Actio
         "launch_app" => input["app"]
             .as_str()
             .map(|s| Action::LaunchApp { app: s.to_string() }),
-        "switch_to_window" => input["target"]
-            .as_str()
-            .map(|s| Action::SwitchToWindow { target: s.to_string() }),
+        "switch_to_window" => input["target"].as_str().map(|s| Action::SwitchToWindow {
+            target: s.to_string(),
+        }),
         _ => Some(Action::Integration {
             name: tool_name.to_string(),
             input: input.clone(),

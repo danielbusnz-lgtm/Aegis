@@ -252,10 +252,7 @@ pub fn press_key(combo: &str) {
 /// arrow keys move the viewport. The `amount` parameter is roughly
 /// "wheel clicks"; we map each click to ~3 arrow presses.
 pub fn scroll(direction: &str, amount: u32) {
-    eprintln!(
-        "[action:scroll] queueing scroll {} × {}",
-        direction, amount
-    );
+    eprintln!("[action:scroll] queueing scroll {} × {}", direction, amount);
     enqueue(InputCmd::Scroll {
         direction: direction.to_string(),
         amount,
@@ -299,9 +296,9 @@ fn exec_scroll(direction: &str, amount: u32) {
     // Map direction to the corresponding arrow-key scancode. Anything we
     // don't recognize falls back to Down arrow.
     let scancode: u16 = match direction.to_lowercase().as_str() {
-        "down" => 108, // KEY_DOWN
-        "up" => 103,   // KEY_UP
-        "left" => 105, // KEY_LEFT
+        "down" => 108,  // KEY_DOWN
+        "up" => 103,    // KEY_UP
+        "left" => 105,  // KEY_LEFT
         "right" => 106, // KEY_RIGHT
         other => {
             eprintln!(

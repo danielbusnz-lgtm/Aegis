@@ -70,33 +70,33 @@ pub fn tools() -> Vec<serde_json::Value> {
     ]
 }
 
-pub fn dispatch(name: &str, input: &serde_json::Value) -> bool {
+pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
     match name {
         "spotify_play" => {
             match input["query"].as_str() {
                 Some(q) => play(q),
                 None => eprintln!("[integration:spotify] spotify_play missing 'query' field"),
             }
-            true
+            Some("{}".to_string())
         }
         "spotify_pause" => {
             control("pause");
-            true
+            Some("{}".to_string())
         }
         "spotify_resume" => {
             // spotify_player calls this "play", not "resume".
             control("play");
-            true
+            Some("{}".to_string())
         }
         "spotify_next" => {
             control("next");
-            true
+            Some("{}".to_string())
         }
         "spotify_previous" => {
             control("previous");
-            true
+            Some("{}".to_string())
         }
-        _ => false,
+        _ => None,
     }
 }
 

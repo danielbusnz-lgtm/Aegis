@@ -21,8 +21,13 @@ pub struct TtsCartesia {
 /// Set `AEGIS_CARTESIA_DIRECT=1` + provide `CARTESIA_API_KEY` to bypass.
 #[derive(Clone)]
 pub enum TtsMode {
-    Direct { api_key: String },
-    Proxy { token_url: String, device_id: String },
+    Direct {
+        api_key: String,
+    },
+    Proxy {
+        token_url: String,
+        device_id: String,
+    },
 }
 
 impl TtsCartesia {
@@ -36,16 +41,34 @@ impl TtsCartesia {
 
         let mode = if std::env::var("AEGIS_CARTESIA_DIRECT").is_ok() {
             let api_key = std::env::var("CARTESIA_API_KEY")?;
+            eprintln!("[tts-cartesia] mode=Direct (using CARTESIA_API_KEY)");
             TtsMode::Direct { api_key }
         } else {
             let device_id = super::device_id::load_or_create()?;
+            eprintln!("[tts-cartesia] mode=Proxy (set AEGIS_CARTESIA_DIRECT=1 to bypass)");
             TtsMode::Proxy {
                 token_url: PROXY_URL.to_string(),
                 device_id,
             }
         };
 
-        Ok(TtsCartesia { voice_id, http, mode })
+        Ok(TtsCartesia {
+            voice_id,
+            http,
+            mode,
+        })
+    }
+
+    /// Pre-open the HTTPS connection to api.cartesia.ai so the first real
+    /// synthesis request doesn't pay TLS handshake cost.
+    pub async fn warm(&self) {
+        let _ = self
+            .http
+            .get("https://api.cartesia.ai/voices/")
+            .header("X-API-Key", "warm")
+            .header("Cartesia-Version", "2026-03-01")
+            .send()
+            .await;
     }
 
     /// Returns the Bearer token to send to Cartesia. In direct mode it's the
@@ -56,7 +79,10 @@ impl TtsCartesia {
     async fn bearer_token(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         match &self.mode {
             TtsMode::Direct { api_key } => Ok(api_key.clone()),
-            TtsMode::Proxy { token_url, device_id } => {
+            TtsMode::Proxy {
+                token_url,
+                device_id,
+            } => {
                 let resp = self
                     .http
                     .post(token_url)
@@ -78,7 +104,6 @@ impl TtsCartesia {
         }
     }
 }
-
 
 impl TtsCartesia {
     /// Streaming TTS — POSTs to `/tts/sse` with raw PCM output and fires
