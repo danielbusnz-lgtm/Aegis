@@ -1,0 +1,77 @@
+/* Welcome page: the breathing cursor button with two orange halos behind it. */
+
+.window {
+  background: #1a1a1a;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Three breathing animations sharing a 5s cadence and 50% peak so they pulse
+   in sync. Different amplitudes make the three layers feel distinct. */
+@keyframes breathing {
+  0%, 100% { transform: scale(0.9); }
+  50%      { transform: scale(1.15); }
+}
+
+@keyframes breathing-slow {
+  0%, 100% { transform: scale(0.97); }
+  50%      { transform: scale(1.03); }
+}
+
+@keyframes breathing-cursor {
+  0%, 100% { transform: scale(0.95); }
+  50%      { transform: scale(1.08); }
+}
+
+#outer-halo {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: rgba(255, 140, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: breathing-slow 5s ease-in-out infinite;
+}
+
+#breathing-button {
+  width: 180px;
+  height: 180px;
+  padding: 0;
+  border: 1px solid rgba(255, 140, 0, 0.1);
+  background: rgba(255, 140, 0, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: breathing 5s ease-in-out infinite;
+}
+
+#cursor-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 96px;
+  height: 96px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  transition: transform 150ms ease-out;
+}
+
+#cursor-button:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+#cursor-button img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  animation: breathing-cursor 5s ease-in-out infinite;
+}

@@ -1,0 +1,26 @@
+/* Shared base styles for every page in the app. Page-specific overrides
+   live in welcome/welcome.css and auth/auth.css. */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: #ffffff;
+}
+
+::-webkit-scrollbar { display: none; }
+
+/* The visual frame inside Tauri's borderless OS window. Each page colors
+   the background and sets its own internal layout via its own stylesheet. */
+.window {
+  box-sizing: border-box;
+  height: 100%;
+  border: none;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}

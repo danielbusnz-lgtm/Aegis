@@ -4,12 +4,14 @@
   "version": "0.1.0",
   "identifier": "com.aegis.settings",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "../src"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
+        "url": "welcome/index.html",
         "title": "Aegis",
         "width": 600,
         "height": 350,
@@ -20,6 +22,36 @@
         "skipTaskbar": true,
         "transparent": true,
         "center": true
+      },
+      {
+        "label": "onboarding",
+        "url": "onboarding/index.html",
+        "title": "Aegis",
+        "width": 600,
+        "height": 350,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "visible": false,
+        "focus": false
+      },
+      {
+        "label": "auth",
+        "url": "auth/signin.html",
+        "title": "Aegis Sign In",
+        "width": 500,
+        "height": 540,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {
