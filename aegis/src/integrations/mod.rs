@@ -26,6 +26,7 @@
 
 pub mod github;
 pub mod gmail;
+pub mod health;
 pub mod spotify;
 pub mod youtube;
 
