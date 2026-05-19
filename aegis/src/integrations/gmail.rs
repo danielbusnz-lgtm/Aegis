@@ -137,6 +137,67 @@ pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Cached on first successful fetch of /profile. The Gmail address of the
+/// authenticated user is stable for the lifetime of the OAuth grant, so we
+/// only need to ask Google once per process. Subsequent reads are free.
+static USER_EMAIL: OnceLock<String> = OnceLock::new();
+
+/// The authenticated user's own Gmail address (e.g. "alice@gmail.com").
+/// Returns `None` if Gmail isn't configured or the profile fetch failed.
+/// Blocks once on first call to hit the Gmail profile endpoint; cached
+/// thereafter so callers can use it in hot paths without worrying about
+/// per-call cost.
+pub fn user_email() -> Option<String> {
+    if let Some(e) = USER_EMAIL.get() {
+        return Some(e.clone());
+    }
+    if !is_available() {
+        return None;
+    }
+    // The async fn writes to USER_EMAIL on success and returns its result
+    // as a status string we discard here. We just want the side effect.
+    let _ = block(cmd_fetch_user_email());
+    USER_EMAIL.get().cloned()
+}
+
+async fn cmd_fetch_user_email() -> String {
+    let t = std::time::Instant::now();
+    let token = match bearer().await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[gmail] cmd_fetch_user_email auth failed: {e}");
+            return format!(r#"{{"error":{}}}"#, serde_json::json!(e));
+        }
+    };
+    let resp = http()
+        .get(format!("{GMAIL_BASE}/profile"))
+        .bearer_auth(&token)
+        .send()
+        .await;
+    let out = match resp {
+        Ok(r) if r.status().is_success() => {
+            let body: serde_json::Value = r.json().await.unwrap_or_default();
+            match body["emailAddress"].as_str() {
+                Some(email) => {
+                    let _ = USER_EMAIL.set(email.to_string());
+                    format!(r#"{{"emailAddress":{}}}"#, serde_json::json!(email))
+                }
+                None => format!(
+                    r#"{{"error":"profile response missing emailAddress: {}"}}"#,
+                    body
+                ),
+            }
+        }
+        Ok(r) => {
+            let status = r.status().as_u16();
+            format!(r#"{{"error":"HTTP {status} on /profile"}}"#)
+        }
+        Err(e) => format!(r#"{{"error":{}}}"#, serde_json::json!(e.to_string())),
+    };
+    eprintln!("[gmail] cmd_fetch_user_email TOTAL {:?}", t.elapsed());
+    out
+}
+
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 fn rt() -> &'static tokio::runtime::Runtime {

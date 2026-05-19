@@ -95,21 +95,13 @@ fn probe_gmail() -> Status {
     if !gmail::is_available() {
         return Status::Skip("AEGIS_GMAIL_CLIENT_ID/SECRET not set".to_string());
     }
-    // dispatch returns JSON; gmail_unread_count returns {"count": N} or
-    // {"error": "..."}. Re-using the production code path tests auth +
-    // network + token file in one shot.
-    let Some(raw) = gmail::dispatch("gmail_unread_count", &serde_json::Value::Null) else {
-        return Status::Err("dispatch returned None for gmail_unread_count".to_string());
-    };
-    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
-        return Status::Err(format!("non-JSON response: {raw}"));
-    };
-    if let Some(err) = parsed.get("error").and_then(|e| e.as_str()) {
-        return Status::Err(err.to_string());
-    }
-    match parsed.get("count").and_then(|c| c.as_i64()) {
-        Some(n) => Status::Ok(format!("{n} unread")),
-        None => Status::Err(format!("unexpected shape: {raw}")),
+    // user_email() hits /profile, which exercises OAuth refresh, the token
+    // cache file, and an HTTP round trip. Success means "auth works AND we
+    // know who the user is" — that result is also cached for the agent
+    // loop to inject into Claude's system prompt.
+    match gmail::user_email() {
+        Some(email) => Status::Ok(format!("authenticated as {email}")),
+        None => Status::Err("profile fetch failed (see [gmail] log lines)".to_string()),
     }
 }
 

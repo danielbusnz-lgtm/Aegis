@@ -514,6 +514,7 @@ impl Claude {
         prompt: &str,
         initial_screenshot_b64: &str,
         running_apps: &[String],
+        user_email: Option<&str>,
         window_x: i64,
         window_y: i64,
         window_width: i64,
@@ -599,6 +600,21 @@ impl Claude {
         // before the full response is collected.
         let mut prev_step_was_integration_only = false;
 
+        // Build the system prompt once per turn. If the caller passed the
+        // user's Gmail address (resolved at startup by the gmail integration
+        // and cached), append it so Claude can resolve "send X to me" /
+        // "email myself" without asking. Allocating one String per turn
+        // (not per step) keeps prompt caching effective.
+        let system: String = match user_email {
+            Some(email) => format!(
+                "{}\n\nThe user's own Gmail address is {email}. When the user says \
+                 'me' / 'myself' / 'send to me' / 'email myself' in an email context, \
+                 this is the recipient. Never ask the user for their email address.",
+                system_prompt_for_actions()
+            ),
+            None => system_prompt_for_actions().to_string(),
+        };
+
         for step in 0..MAX_STEPS {
             // First-feedback short circuit: a previous step has already
             // either fired a visible cursor action or pushed the first PCM
@@ -625,7 +641,7 @@ impl Claude {
                 "model": "claude-haiku-4-5",
                 "max_tokens": 1024,
                 "stream": true,
-                "system": system_prompt_for_actions(),
+                "system": system,
                 "tools": tools_array_value(declared_w, declared_h, integration_tools.clone()),
                 "messages": messages,
             });

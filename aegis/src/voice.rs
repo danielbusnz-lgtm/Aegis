@@ -438,10 +438,12 @@ fn run_one_turn(
         let stream_to_tts = want_speech;
 
         let early_exit_action = early_exit.clone();
+        let user_email = crate::integrations::gmail::user_email();
         let cursor_task = claude.run_agent_loop(
             &transcript,
             initial_screenshot,
             &running_apps,
+            user_email.as_deref(),
             x as i64,
             y as i64,
             w as i64,
