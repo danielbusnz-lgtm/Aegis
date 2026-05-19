@@ -15,7 +15,7 @@
 //   * Slow startup (first chunk delay should be ~0ms with pre-roll)
 //   * Deepgram lag (first interim should arrive 100-300ms after first chunk)
 
-#[path = "../audio.rs"]
+#[path = "../audio/mod.rs"]
 mod audio;
 #[path = "../hotkey/mod.rs"]
 mod hotkey;
