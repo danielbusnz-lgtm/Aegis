@@ -1,0 +1,38 @@
+name: linux-build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev \
+            libgtk4-layer-shell-dev \
+            libjack-jackd2-dev \
+            pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Type-check all targets
+        run: cargo check --all-targets --features hyprland
+
+      - name: Build aegis (main bin)
+        run: cargo build --features hyprland --bin aegis
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-linux
+          path: target/debug/aegis
