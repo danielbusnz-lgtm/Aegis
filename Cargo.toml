@@ -1,5 +1,5 @@
 [workspace]
-members = ["aegis", "memex"]
+members = ["aegis", "aegis-settings/src-tauri", "memex"]
 resolver = "2"
 
 # Shared profile tweaks live here so both crates compile the same way. Per-crate

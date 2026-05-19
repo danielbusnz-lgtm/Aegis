@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #ffffff;
+      }
+
+      ::-webkit-scrollbar { display: none; }
+
+      .window {
+        box-sizing: border-box;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.01);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.35),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+          0 6px 20px rgba(0, 0, 0, 0.35);
+      }
+
+      .screen {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .screen[hidden] { display: none; }
+
+      #screen-welcome {
+        align-items: center;
+        justify-content: center;
+      }
+
+      .cursor-halo-outer {
+        width: 300px;
+        height: 300px;
+        border-radius: 50%;
+        background: rgba(255, 140, 0, 0.05);
+        display: grid;
+        place-items: center;
+      }
+
+      .cursor-halo {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: rgba(255, 140, 0, 0.05);
+        display: grid;
+        place-items: center;
+      }
+
+      #screen-welcome img {
+        width: 96px;
+        height: 96px;
+        image-rendering: pixelated;
+      }
+
+      .integrations {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        padding: 24px;
+        margin-top: auto;
+      }
+
+      .integration {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        outline: none;
+        display: grid;
+        place-items: center;
+      }
+
+      .integration img {
+        width: 32px;
+        height: 32px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window" data-tauri-drag-region>
+      <section id="screen-welcome" class="screen">
+        <div class="cursor-halo-outer">
+          <div class="cursor-halo">
+            <img src="icons/cursor.png" alt="" />
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-settings" class="screen" hidden>
+        <div class="integrations">
+          <button class="integration" data-integration="gmail" aria-label="Connect Gmail">
+            <img src="icons/gmail.svg" alt="" />
+          </button>
+          <button class="integration" data-integration="github" aria-label="Connect GitHub">
+            <img src="icons/github.svg" alt="" />
+          </button>
+          <button class="integration" data-integration="spotify" aria-label="Connect Spotify">
+            <img src="icons/spotify.svg" alt="" />
+          </button>
+          <button class="integration" data-integration="youtube" aria-label="Connect YouTube">
+            <img src="icons/youtube.svg" alt="" />
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const screens = ["welcome", "settings"];
+      function show(name) {
+        screens.forEach((s) => {
+          document.getElementById(`screen-${s}`).hidden = s !== name;
+        });
+      }
+      // Call show("settings") from the console to preview the settings view.
+
+      document.querySelectorAll(".integration").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          console.log("integrate:", btn.dataset.integration);
+          // TODO: invoke a Tauri command to start the OAuth flow.
+        });
+      });
+    </script>
+  </body>
+</html>
