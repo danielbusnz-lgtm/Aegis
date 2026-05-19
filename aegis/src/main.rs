@@ -35,9 +35,9 @@ fn main() {
 
     hotkey::init().expect("signal handler setup");
 
-    // Probe every integration API in parallel and print a one-line status
-    // per integration. Pure diagnostics — failures here never block boot.
-    integrations::health::check_and_print();
+    // Probe every integration API in parallel on a background thread so the
+    // cursor opens immediately. Pure diagnostics — never gates boot.
+    std::thread::spawn(integrations::health::check_and_print);
 
     std::thread::spawn(move || voice::run_loop(mic, stt, claude, cartesia));
 

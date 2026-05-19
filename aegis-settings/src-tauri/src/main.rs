@@ -1,5 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::process::Command;
+
+/// Launch the actual aegis cursor + voice agent as a child process. Looks for
+/// the binary in the workspace's debug then release target dirs; for shipped
+/// builds we'd bundle it next to aegis-settings instead.
+#[tauri::command]
+fn spawn_aegis() -> Result<(), String> {
+    let candidates = ["target/debug/aegis", "target/release/aegis"];
+    for path in candidates {
+        if Command::new(path).spawn().is_ok() {
+            return Ok(());
+        }
+    }
+    Err("aegis binary not found in target/debug or target/release. Build it with `cargo build -p aegis` first.".to_string())
+}
+
 fn main() {
     // webkit2gtk's DMABUF renderer crashes against Hyprland and several
     // other Wayland compositors with "Error 71 (Protocol error)". Disabling
@@ -11,6 +27,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![spawn_aegis])
         .run(tauri::generate_context!())
         .expect("error running aegis-settings");
 }
