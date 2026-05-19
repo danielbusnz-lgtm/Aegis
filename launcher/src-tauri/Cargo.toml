@@ -1,8 +1,8 @@
 [package]
-name = "aegis-settings"
+name = "launcher"
 version = "0.1.0"
 edition = "2024"
-description = "Aegis settings and onboarding window"
+description = "Aegis launcher and onboarding window"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

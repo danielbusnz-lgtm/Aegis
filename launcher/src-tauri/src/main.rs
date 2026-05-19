@@ -4,7 +4,7 @@ use std::process::Command;
 
 /// Launch the actual aegis cursor + voice agent as a child process. Looks for
 /// the binary in the workspace's debug then release target dirs; for shipped
-/// builds we'd bundle it next to aegis-settings instead.
+/// builds we'd bundle it next to the launcher instead.
 #[tauri::command]
 fn spawn_aegis() -> Result<(), String> {
     let candidates = ["target/debug/aegis", "target/release/aegis"];
@@ -29,5 +29,5 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![spawn_aegis])
         .run(tauri::generate_context!())
-        .expect("error running aegis-settings");
+        .expect("error running launcher");
 }
