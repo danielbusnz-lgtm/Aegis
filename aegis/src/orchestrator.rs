@@ -29,7 +29,7 @@ fn set_cursor_idle() {}
 pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: TtsCartesia) {
     let session = VoiceSession::start(mic, stt, claude, cartesia);
 
-    println!("aegis ready — hold SUPER+space to talk");
+    println!("aegis ready. hold SUPER+space to talk");
     loop {
         hotkey::wait_for_press();
         let press_t = std::time::Instant::now();
@@ -110,7 +110,7 @@ fn run_one_turn(
     // Hybrid classification: try the local keyword classifier first
     // (sub-millisecond). If it returns Some, we skip the LLM round-trip
     // entirely. If it returns None, fall through to the LLM classifier
-    // (~700ms) — spawned in parallel with the screenshot join so the
+    // (~700ms), spawned in parallel with the screenshot join so the
     // wait at least overlaps with the screenshot resize.
     let keyword_intent = keyword_classify(&transcript);
     let classifier_task = if keyword_intent.is_some() {
@@ -165,7 +165,7 @@ fn run_one_turn(
             );
             llm_intent
         }
-        (None, None) => None, // unreachable in practice — guard anyway
+        (None, None) => None, // unreachable in practice; guard anyway
     };
     eprintln!(
         "[timing] classifier ready → {:?}: {:?}",
@@ -175,7 +175,7 @@ fn run_one_turn(
 
     // Fail loud if the classifier couldn't pick a category. The current
     // contract: speak a short error and stop. No silent fallback to
-    // run_agent_loop — surprises here mean the prompt drifted or the API
+    // run_agent_loop. Surprises here mean the prompt drifted or the API
     // changed, and we want to see it.
     let intent = match intent_result {
         Some(i) => i,

@@ -19,7 +19,7 @@ pub struct SttDeepgram {
 
 /// Auth mode. In proxy mode aegis fetches a short-lived JWT from aegis-proxy
 /// before opening Deepgram's WebSocket. In direct mode the local API key is
-/// used as a `Token`-prefixed credential — only enable with
+/// used as a `Token`-prefixed credential. Only enable with
 /// `AEGIS_DEEPGRAM_DIRECT=1` (useful for dev / burning your own quota).
 #[derive(Clone)]
 pub enum SttMode {
@@ -67,7 +67,7 @@ impl SttDeepgram {
     /// Build the `Authorization` header value for the Deepgram WebSocket.
     /// In direct mode the API key is used as-is with a `Token` prefix.
     /// In proxy mode we POST to aegis-proxy for a short-lived JWT and use
-    /// `Bearer <jwt>` — Deepgram's token-based auth scheme.
+    /// `Bearer <jwt>` (Deepgram's token-based auth scheme).
     async fn auth_header(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         match &self.mode {
             SttMode::Direct { api_key } => Ok(format!("Token {}", api_key)),
@@ -209,7 +209,7 @@ impl SttDeepgram {
                             }
                         }
                         FrameOutcome::WsClosed => {
-                            // WS died mid-stream — bail with what we have.
+                            // WS died mid-stream. Bail with what we have.
                             let result = merge(finalized, latest_interim);
                             eprintln!("[deepgram-debug] WS closed mid-stream, returning: {:?}", result);
                             return Ok(result);
@@ -283,9 +283,9 @@ use crate::tuning::STT_QUIESCENCE_MS as QUIESCENCE_MS;
 enum FrameOutcome {
     /// Frame processed (interim or non-Results), keep looping.
     Continue,
-    /// Frame was an is_final event — caller may want to stop waiting.
+    /// Frame was an is_final event. Caller may want to stop waiting.
     GotFinal,
-    /// The WS stream ended — caller must stop.
+    /// The WS stream ended. Caller must stop.
     WsClosed,
 }
 
@@ -339,7 +339,7 @@ fn merge(finalized: String, latest_interim: String) -> String {
     format!("{} {}", finalized, latest_interim)
 }
 
-/// Same as `merge` but borrows its inputs — used by the running-transcript
+/// Same as `merge` but borrows its inputs. Used by the running-transcript
 /// broadcast inside the read loop where we don't want to consume state.
 fn merge_ref(finalized: &str, latest_interim: &str) -> String {
     if latest_interim.is_empty() {

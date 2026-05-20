@@ -1,6 +1,6 @@
 //! Single-shot visual action dispatcher. Used when the classifier returns
-//! Intent::FindAction — the user wants the cursor to move, a click to
-//! fire, text to be typed, an app to launch, or a URL to open.
+//! Intent::FindAction (the user wants the cursor to move, a click to
+//! fire, text to be typed, an app to launch, or a URL to open).
 //!
 //! Differences from `run_agent_loop`:
 //!   * Forces a tool call via `tool_choice: { type: any }` so Claude can
@@ -10,7 +10,7 @@
 //!   * Smaller tool set (no gmail/spotify/github/youtube). The classifier
 //!     already routed those to the Integration path; including them here
 //!     would just tempt Claude away from the cursor tool.
-//!   * Short, decisive system prompt — "pick one tool, no preamble".
+//!   * Short, decisive system prompt: "pick one tool, no preamble".
 //!   * No agent loop. Single Claude call, action fires, we're done.
 //!
 //! `on_action` fires the moment Claude finishes streaming the tool's
@@ -46,7 +46,7 @@ impl Claude {
 
         let user_prompt = format!(
             "The user said: \"{}\". Pick the single best tool for this request \
-             and call it. Skip directly to the tool call — no preamble, no \
+             and call it. Skip directly to the tool call. No preamble, no \
              description.",
             prompt
         );
@@ -64,7 +64,7 @@ impl Claude {
             ],
             "tools": find_action_tools(declared_w, declared_h),
             // Force Claude to call SOME tool (any of the ones we provided).
-            // No text-only responses — that's the whole point of this path.
+            // No text-only responses. That's the whole point of this path.
             "tool_choice": { "type": "any" },
             "messages": [{
                 "role": "user",
@@ -105,7 +105,7 @@ impl Claude {
         }
 
         // Stream parse: extract the single tool_use that Claude was forced
-        // to emit. We only care about the first one — the prompt says
+        // to emit. We only care about the first one. The prompt says
         // "single best tool," so multiple calls in one response would be a
         // model misbehavior we'd want to see in logs but not act on twice.
         let mut stream = response.bytes_stream();
@@ -207,7 +207,7 @@ impl Claude {
 fn find_action_system_prompt() -> &'static str {
     "You are a desktop voice-assistant action dispatcher. A screenshot of \
 the user's screen is attached. You MUST emit exactly one tool call. \
-Never respond with descriptive text — the user wants the cursor to \
+Never respond with descriptive text. The user wants the cursor to \
 MOVE or an action to FIRE, not to read coordinates or a description.\n\
 \n\
 Tool selection:\n\
@@ -234,7 +234,7 @@ the screenshot. Calling screenshot wastes ~6s of latency.\n\
 Emit the tool call directly. No preamble, no description, no narration."
 }
 
-/// Tool definitions for find_action. Only the cursor + launch tools —
+/// Tool definitions for find_action. Only the cursor + launch tools;
 /// no integration tools (those go through the Integration path).
 fn find_action_tools(declared_w: u32, declared_h: u32) -> serde_json::Value {
     serde_json::json!([

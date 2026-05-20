@@ -1,10 +1,16 @@
 //! Cursor overlay window. The implementation is selected at compile time
 //! by a Cargo feature so the same callers work regardless of platform.
 
+/// Visual state of the overlay cursor. The painter reads this to choose
+/// what to render; the orchestrator writes it as voice turns progress.
 #[derive(Debug)]
 pub enum CursorState {
+    /// Default. Cursor follows the system mouse, no soundwave.
     Idle,
+    /// Hotkey held, mic capturing. Cursor renders a live soundwave.
     Listening,
+    /// Hotkey released, waiting for Claude's first response or first
+    /// PCM chunk. Cursor renders a loading animation.
     Loading,
 }
 

@@ -8,8 +8,8 @@
 //! pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String>;
 //! ```
 //!
-//! No trait, no dyn dispatch — convention covers it for a hand-edited list
-//! of integrations. To add a new one (e.g. Discord), create
+//! No trait, no dyn dispatch. Convention covers it for a hand-edited
+//! list of integrations. To add a new one (e.g. Discord), create
 //! `src/integrations/discord.rs` and add two lines to `all_tools` and
 //! `dispatch` below. That's the entire onboarding cost.
 //!
@@ -20,7 +20,7 @@
 //! tool_result content.
 //!
 //! An integration's `is_available()` returning false hides its tools
-//! entirely from Claude's tools array — so Claude can't try to call a
+//! entirely from Claude's tools array, so Claude can't try to call a
 //! Spotify tool if spotify_player isn't installed. No "tool failed at
 //! runtime" surprises.
 

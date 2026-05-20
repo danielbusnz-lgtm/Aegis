@@ -31,11 +31,11 @@ static INPUT_TX: OnceLock<Sender<InputCmd>> = OnceLock::new();
 
 /// Open a URL in the user's currently-focused browser when possible, falling
 /// back to xdg-open. Priority:
-///   1. `AEGIS_BROWSER` env var — force a specific binary.
+///   1. `AEGIS_BROWSER` env var: force a specific binary.
 ///   2. Hyprland's currently-focused window, if it's a Chromium-family
 ///      browser (Chrome, Brave, Chromium, Edge, Vivaldi). Chromium-family
 ///      can be invoked directly without D-Bus session issues.
-///   3. xdg-open — uses the system default browser. Necessary for Firefox
+///   3. xdg-open: uses the system default browser. Necessary for Firefox
 ///      since direct `firefox <url>` calls hang on D-Bus when aegis isn't
 ///      in the user session.
 pub fn open_url(raw: &str) {
@@ -134,7 +134,7 @@ fn focused_browser_binary() -> Option<String> {
     let class = window["class"].as_str()?.to_lowercase();
 
     let candidates: &[&str] = match class.as_str() {
-        // Firefox-family deliberately not routed directly — defer to xdg-open
+        // Firefox-family deliberately not routed directly. Defer to xdg-open
         // so it goes through the session's lock-file + D-Bus handshake.
         "firefox" | "firefox-esr" | "librewolf" | "waterfox" | "zen" => return None,
         "chromium" | "chromium-browser" => &["chromium"],
@@ -263,7 +263,7 @@ pub fn press_key(combo: &str) {
 
 /// Scroll by sending repeated arrow-key presses via ydotool. Wayland has
 /// no clean "scroll at point" primitive, so we approximate with keyboard
-/// scrolling — works in browsers, terminals, file managers, anywhere
+/// scrolling. Works in browsers, terminals, file managers, anywhere
 /// arrow keys move the viewport. The `amount` parameter is roughly
 /// "wheel clicks"; we map each click to ~3 arrow presses.
 pub fn scroll(direction: &str, amount: u32) {
@@ -329,7 +329,7 @@ fn exec_scroll(direction: &str, amount: u32) {
     };
     // 3 presses/wheel-click matches GTK's default scroll-line count.
     // Cap at 30 because Claude sometimes emits amount=99 meaning "scroll
-    // to the end" — uncapped that hangs the UI firing arrow keys.
+    // to the end". Uncapped that hangs the UI firing arrow keys.
     let presses = (amount.saturating_mul(3)).clamp(1, 30);
 
     let mut args: Vec<String> = vec!["key".to_string()];
@@ -464,7 +464,7 @@ fn key_name_to_scancode(name: &str) -> Option<u16> {
         "delete" | "del" => Some(111),
         "super" | "meta" | "win" | "leftmeta" => Some(125),
         // Letters a-z map to KEY_A=30 through KEY_Z=44 in keyboard layout order
-        // (not alphabetical — it's QWERTY row order).
+        // (not alphabetical: QWERTY row order).
         s if s.len() == 1 => {
             let c = s.chars().next()?;
             const QWERTY: &[(char, u16)] = &[
@@ -506,11 +506,11 @@ fn key_name_to_scancode(name: &str) -> Option<u16> {
 
 /// Startup probe: warn if ydotool isn't installed or the daemon isn't
 /// reachable, so the user knows clicks will silently no-op. Doesn't fail
-/// startup — pointing/opening/launching still work without it.
+/// startup. Pointing/opening/launching still work without it.
 pub fn check_input_injection_available() {
     match Command::new("ydotool").arg("--version").output() {
         Ok(o) if o.status.success() => {
-            eprintln!("[startup] ydotool available — click actions will fire real input");
+            eprintln!("[startup] ydotool available. click actions will fire real input");
         }
         _ => {
             eprintln!(

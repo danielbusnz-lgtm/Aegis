@@ -289,7 +289,7 @@ impl LiveMic {
 /// Find the input device we want to capture from.
 ///
 /// Selection order:
-///   1. `AEGIS_INPUT_DEVICE` env var — case-insensitive substring match
+///   1. `AEGIS_INPUT_DEVICE` env var: case-insensitive substring match
 ///      against device names. Manual override for edge cases (multi-DEV
 ///      cards, weird routings).
 ///   2. Auto-detect via `pactl`: query pipewire/pulse's default source,
@@ -352,7 +352,7 @@ fn pick_input_device() -> cpal::Device {
             return d;
         }
         eprintln!(
-            "[audio] pactl reports alsa.id={} but no matching cpal front:/hw: device — falling back",
+            "[audio] pactl reports alsa.id={} but no matching cpal front:/hw: device, falling back",
             card_id
         );
     }
@@ -370,7 +370,7 @@ fn pick_input_device() -> cpal::Device {
     match picked {
         Some(d) => d,
         None => {
-            eprintln!("[audio] mic NOT found — no input device available");
+            eprintln!("[audio] mic NOT found. no input device available");
             panic!("no input device available");
         }
     }

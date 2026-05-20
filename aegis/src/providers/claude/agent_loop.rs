@@ -83,8 +83,8 @@ impl Claude {
              4. open_url is for pure web destinations: sites without a \
                 desktop app, or when the user explicitly says \"in the browser\".\n\n\
              Pick the best action(s) and invoke their tools. If the request \
-             needs multiple steps, call multiple tools across iterations — \
-             you'll get a fresh screenshot after each batch. When the task \
+             needs multiple steps, call multiple tools across iterations \
+             (you'll get a fresh screenshot after each batch). When the task \
              is fully done, respond with plain text and no tool calls to end \
              the chain.",
             prompt, running_list
@@ -164,7 +164,7 @@ impl Claude {
             // Hash the cacheable prefix (system + tools) so we can spot when
             // it varies between turns. If the hash changes turn-to-turn,
             // prompt caching can't hit. Should be identical across an
-            // entire session — if not, something is leaking into the
+            // entire session. If not, something is leaking into the
             // prefix that shouldn't be.
             let cache_prefix_hash = {
                 use std::hash::{Hash, Hasher};

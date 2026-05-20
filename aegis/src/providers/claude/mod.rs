@@ -41,7 +41,7 @@ pub enum Action {
     Key { key: String },
     /// `computer` tool, `scroll`. Direction is "up"/"down"/"left"/"right";
     /// amount is the number of "wheel clicks" Claude wants. Coordinate
-    /// (if Claude provided one) is currently ignored — Wayland doesn't
+    /// (if Claude provided one) is currently ignored. Wayland doesn't
     /// expose a clean "scroll at point" primitive without raw evdev.
     Scroll { direction: String, amount: u32 },
     /// `open_url` custom tool. URL is whatever Claude emitted; validation
@@ -96,7 +96,7 @@ impl Claude {
 
     /// Initialize from `.env`/environment. Default behavior is to route through
     /// the hosted aegis-proxy on Cloudflare, identified by a per-install UUID.
-    /// No API key needed — that's the whole plug-and-play story.
+    /// No API key needed; that's the whole plug-and-play story.
     ///
     /// To bypass the proxy and talk to Anthropic directly (useful for local
     /// dev, debugging, or burning your own credit), set

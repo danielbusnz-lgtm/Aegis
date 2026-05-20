@@ -23,7 +23,7 @@ pub(super) fn tools_array_value(
             "description": "Open a URL in the user's default web browser. \
                 Use ONLY for full https:// or http:// URLs the user explicitly \
                 wants to navigate to. Do NOT use for clicking a link visible on \
-                screen — use the computer tool's left_click for that.",
+                screen (use the computer tool's left_click for that).",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -37,7 +37,7 @@ pub(super) fn tools_array_value(
             "description": "Launch a desktop application by name. Use for queries \
                 like 'open Spotify', 'launch Firefox'. The app argument is the \
                 app's common name. Do NOT use for switching to an already-running \
-                app — use switch_to_window for that.",
+                app (use switch_to_window for that).",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -207,7 +207,7 @@ pub(super) fn parse_tool_call(
     }
 
     // Coordinate actions. Accept either a JSON array [x, y] OR a JSON
-    // string like "[640, 47]" — Claude's malformed shape emits the latter.
+    // string like "[640, 47]"; Claude's malformed shape emits the latter.
     let (raw_x, raw_y) = extract_coordinate(&effective_input["coordinate"])?;
     let raw_x = raw_x.clamp(0, declared_w as i64 - 1);
     let raw_y = raw_y.clamp(0, declared_h as i64 - 1);
@@ -217,8 +217,8 @@ pub(super) fn parse_tool_call(
     let y = sy.clamp(window_y, window_y + window_height - 1);
 
     match action {
-        // Treat right/middle/double/triple clicks as left clicks for now —
-        // most apps treat them similarly for the "I want to interact with
+        // Treat right/middle/double/triple clicks as left clicks for now.
+        // Most apps treat them similarly for the "I want to interact with
         // THIS element" case. We can add separate Action variants if a
         // real use case appears.
         "left_click" | "right_click" | "middle_click" | "double_click" | "triple_click" => {
@@ -276,7 +276,7 @@ mod tests {
     /// Anthropic prompt caching only kicks in if every request marks the
     /// SAME prefix boundary. If a future refactor strips the cache_control
     /// field off the last tool, requests still succeed but cost ~10x more
-    /// and every TTFT jumps ~300-500ms — a silent performance regression.
+    /// and every TTFT jumps ~300-500ms (a silent performance regression).
     /// This test fails loudly if the marker disappears.
     #[test]
     fn last_tool_has_cache_control_marker() {
@@ -289,7 +289,7 @@ mod tests {
             .expect("tools array should be non-empty");
         let cache_control = last.get("cache_control").unwrap_or_else(|| {
             panic!(
-                "last tool is missing the cache_control marker — prompt caching is OFF.\nlast tool was: {}",
+                "last tool is missing the cache_control marker. prompt caching is OFF.\nlast tool was: {}",
                 serde_json::to_string_pretty(last).unwrap_or_default()
             )
         });

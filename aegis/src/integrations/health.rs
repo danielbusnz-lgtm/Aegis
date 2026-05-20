@@ -11,7 +11,7 @@ use super::{github, gmail, spotify, youtube};
 
 /// Per-integration result. `Ok` carries a short status string ("playing on
 /// archbox", "12 unread"). `Err` carries the reason for failure. `Skip` is
-/// "not configured / not installed" — distinct from broken.
+/// "not configured / not installed", which is distinct from broken.
 enum Status {
     Ok(String),
     Err(String),
@@ -97,7 +97,7 @@ fn probe_gmail() -> Status {
     }
     // user_email() hits /profile, which exercises OAuth refresh, the token
     // cache file, and an HTTP round trip. Success means "auth works AND we
-    // know who the user is" — that result is also cached for the agent
+    // know who the user is". That result is also cached for the agent
     // loop to inject into Claude's system prompt.
     match gmail::user_email() {
         Some(email) => Status::Ok(format!("authenticated as {email}")),

@@ -5,8 +5,9 @@
 mod input;
 mod output;
 
-// test_stt only uses the input side, so the re-export looks unused there.
-// The main aegis binary uses both.
+// Examples (test_stt, test_stt_bench) include this module via #[path]
+// but only use the input side, so the output re-export looks unused
+// from their compile units. The aegis binary uses both.
 #[allow(unused_imports)]
 pub use input::*;
 #[allow(unused_imports)]

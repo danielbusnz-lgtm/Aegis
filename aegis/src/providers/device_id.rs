@@ -9,7 +9,7 @@
 //!
 //! On subsequent runs, reads the same file. The UUID is the user's "account"
 //! for all intents and purposes. Deleting the file gives them a fresh
-//! daily quota — which is fine for v0.1; abuse protection lives in
+//! daily quota, which is fine for v0.1. Abuse protection lives in
 //! Cloudflare's WAF and per-IP rate limits, not in this identifier.
 
 use std::fs;

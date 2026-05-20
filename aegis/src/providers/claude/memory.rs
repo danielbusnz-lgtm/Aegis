@@ -1,6 +1,6 @@
-//! Memory path. Used when the classifier returns Intent::Memory — the
-//! user wants to store a fact about themselves ("remember my X is Y")
-//! or recall one they told us before ("what did I tell you about Z").
+//! Memory path. Used when the classifier returns Intent::Memory (the
+//! user wants to store a fact about themselves like "remember my X is Y",
+//! or recall one they told us before like "what did I tell you about Z").
 //!
 //! Storage: append-only JSONL at `~/.config/aegis/memory.jsonl`. Each
 //! line is `{ "key": "...", "value": "...", "ts": "..." }`. The whole
@@ -42,7 +42,7 @@ struct MemoryInner {
 impl MemoryStore {
     /// Open the store at the default location. Creates parent directory
     /// if it doesn't exist. Loads any existing facts. Errors only on
-    /// filesystem issues — missing file is treated as empty store.
+    /// filesystem issues. Missing file is treated as empty store.
     pub fn open_default() -> Result<Self, Box<dyn std::error::Error>> {
         let mut path = dirs::config_dir().ok_or("could not locate config dir")?;
         path.push("aegis");

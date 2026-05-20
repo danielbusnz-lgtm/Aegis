@@ -2,7 +2,7 @@
 //!
 //! The flow: yt-dlp resolves a search query to the first matching video ID
 //! server-side (no browser needed), then aegis opens
-//! `https://www.youtube.com/watch?v=<id>` in the user's browser — which
+//! `https://www.youtube.com/watch?v=<id>` in the user's browser, which
 //! YouTube auto-plays. One tool call vs. 4-6 steps of visual automation.
 //!
 //! Setup the user does once:
@@ -14,6 +14,9 @@
 
 use std::process::Command;
 
+/// True iff yt-dlp is on PATH. Hides the youtube_play tool from
+/// Claude's array when false so the agent doesn't call something that
+/// would fail at runtime.
 pub fn is_available() -> bool {
     Command::new("which")
         .arg("yt-dlp")
@@ -24,17 +27,18 @@ pub fn is_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Tool schemas this integration adds to Claude's tools array.
 pub fn tools() -> Vec<serde_json::Value> {
     vec![serde_json::json!({
         "name": "youtube_play",
         "description": "Search YouTube and open the top video in the user's browser. \
             Dramatically faster than navigating to youtube.com and clicking through \
-            search results — yt-dlp resolves the video ID server-side and the browser \
+            search results: yt-dlp resolves the video ID server-side and the browser \
             opens directly on the video page (autoplays). Use for 'play X on YouTube', \
             'show me X on YouTube', 'find X video', etc. \
             \
             Do NOT use for 'search YouTube for X' when the user wants to BROWSE \
-            results (multiple options to choose from) — use open_url with \
+            results (multiple options to choose from). Use open_url with \
             youtube.com/results?search_query=X for that. youtube_play is for the \
             single-best-result case.",
         "input_schema": {
@@ -50,6 +54,9 @@ pub fn tools() -> Vec<serde_json::Value> {
     })]
 }
 
+/// Returns `Some("{}")` if this integration owned the tool, `None`
+/// otherwise. Fire-and-forget: the actual side effect (browser open)
+/// happens in `play()` and doesn't surface a result to Claude.
 pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
     match name {
         "youtube_play" => {

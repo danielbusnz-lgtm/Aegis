@@ -62,7 +62,7 @@ pub fn capture_resized_for_claude(
     let local_y = (y - monitor.y()?).max(0) as u32;
     let image = monitor.capture_region(local_x, local_y, width as u32, height as u32)?;
 
-    // xcap gives us an RGBA buffer directly — convert to RGB for the resize.
+    // xcap gives us an RGBA buffer directly. Convert to RGB for the resize.
     let rgba = image.into_raw();
     let mut rgb: Vec<u8> = Vec::with_capacity((width * height * 3) as usize);
     for chunk in rgba.chunks_exact(4) {

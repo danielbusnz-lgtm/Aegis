@@ -11,6 +11,9 @@
 
 use std::process::{Command, Stdio};
 
+/// True iff `gh` is on PATH AND already authenticated. Both checks
+/// because `gh` installed without auth would still surface tools to
+/// Claude but every call would fail.
 pub fn is_available() -> bool {
     let has_bin = Command::new("which")
         .arg("gh")
@@ -31,6 +34,7 @@ pub fn is_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Tool schemas this integration adds to Claude's tools array.
 pub fn tools() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
@@ -140,6 +144,9 @@ pub fn tools() -> Vec<serde_json::Value> {
     ]
 }
 
+/// Returns `Some(json)` if this integration owned the tool, `None`
+/// otherwise. `json` is either the gh CLI's `--json` output verbatim or
+/// `{"error": "..."}` on failure.
 pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
     match name {
         "gh_my_prs" => Some(my_prs(input)),
@@ -153,6 +160,9 @@ pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Shell out to `gh` and return its stdout as a String. On failure
+/// returns `{"error": "..."}` so Claude sees a consistent shape across
+/// all integration tools.
 fn run_gh(args: &[&str]) -> String {
     let t = std::time::Instant::now();
     eprintln!("[gh] gh {}", args.join(" "));

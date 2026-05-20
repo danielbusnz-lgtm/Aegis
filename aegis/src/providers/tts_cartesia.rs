@@ -73,7 +73,7 @@ impl TtsCartesia {
 
     /// Returns the Bearer token to send to Cartesia. In direct mode it's the
     /// raw API key. In proxy mode it's a short-lived JWT minted by aegis-proxy
-    /// on each call — ~50ms HTTPS round-trip per synthesis. Per-call (vs. per-
+    /// on each call (~50ms HTTPS round-trip per synthesis). Per-call (vs. per-
     /// turn) minting is wasteful when a turn produces many sentences; revisit
     /// if Cartesia daily caps trip in practice.
     async fn bearer_token(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -106,7 +106,7 @@ impl TtsCartesia {
 }
 
 impl TtsCartesia {
-    /// Streaming TTS — POSTs to `/tts/sse` with raw PCM output and fires
+    /// Streaming TTS. POSTs to `/tts/sse` with raw PCM output and fires
     /// `on_chunk` for each audio chunk as it arrives. Caller is expected to
     /// pipe the chunks into rodio (or any sink that accepts raw i16 PCM at
     /// 24kHz mono).

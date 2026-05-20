@@ -33,7 +33,7 @@ pub fn tools() -> Vec<serde_json::Value> {
             "name": "spotify_play",
             "description": "Search Spotify and play the top result. Use this for ANY \
                 'play X on Spotify' / 'play song X' intent when the user has Spotify \
-                installed — it's dramatically faster than visually clicking through the \
+                installed. Dramatically faster than visually clicking through the \
                 Spotify UI. The query can be a song name, artist, album, or combination \
                 (e.g. 'sicko mode travis scott'). Requires Spotify Premium.",
             "input_schema": {
@@ -96,7 +96,7 @@ fn err_body(msg: &str) -> String {
 }
 
 /// Search for `query`, take the first track ID from the result, and start
-/// playback. Two shell-outs — spotify_player's CLI doesn't (as of this
+/// playback. Two shell-outs: spotify_player's CLI doesn't (as of this
 /// writing) expose a single "search and play top result" command. If the
 /// search output format isn't what `extract_first_track_id` expects, the
 /// raw stdout is logged so the user can adjust the parser.
@@ -180,8 +180,8 @@ fn control(subcommand: &str) -> String {
 /// ```json
 /// {"tracks":[{"id":"3FijoNKG...","name":"...","artists":[...], ...}, ...]}
 /// ```
-/// Returns None if JSON parse fails or the tracks array is empty —
-/// caller logs raw stdout in that case so we can adjust.
+/// Returns None if JSON parse fails or the tracks array is empty.
+/// Caller logs raw stdout in that case so we can adjust the parser.
 fn extract_first_track_id(text: &str) -> Option<String> {
     let json: serde_json::Value = serde_json::from_str(text).ok()?;
     let tracks = json["tracks"].as_array()?;

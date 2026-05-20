@@ -1,6 +1,6 @@
-//! Conversational path. Used when the classifier returns Intent::Chat —
-//! the user asked something that doesn't need the screen, doesn't need a
-//! service tool, and doesn't need multi-step planning. Just talk back.
+//! Conversational path. Used when the classifier returns Intent::Chat
+//! (the user asked something that doesn't need the screen, doesn't need
+//! a service tool, and doesn't need multi-step planning). Just talk back.
 //!
 //! Differences from `run_agent_loop`:
 //!   * No tools at all. Claude can't accidentally try to call gmail or
@@ -121,13 +121,13 @@ impl Claude {
 }
 
 /// Chat's behavioral system prompt. Stable across the whole session so
-/// it caches well. Keep short — every token here is sent on every chat
+/// it caches well. Keep short. Every token here is sent on every chat
 /// turn.
 fn chat_system_prompt() -> &'static str {
     "You are aegis, a voice assistant running on the user's desktop. The \
 user is speaking to you and hearing your replies via TTS, so:\n\
 - Be concise. Aim for 1-3 sentences unless the user asks for detail.\n\
-- Plain prose only. No markdown, no lists, no code blocks — they sound \
+- Plain prose only. No markdown, no lists, no code blocks. They sound \
 weird when read aloud.\n\
 - Conversational tone. Imagine you're talking, not writing.\n\
 - Don't restate the question. Just answer it.\n\

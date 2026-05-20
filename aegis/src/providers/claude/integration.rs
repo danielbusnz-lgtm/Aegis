@@ -1,6 +1,6 @@
 //! Integration tool dispatcher. Used when the classifier returns
-//! Intent::Integration — the user wants to use a connected service
-//! (Gmail, Spotify, GitHub, YouTube) and doesn't need the screen.
+//! Intent::Integration (the user wants to use a connected service like
+//! Gmail, Spotify, GitHub, or YouTube and doesn't need the screen).
 //!
 //! Differences from `run_agent_loop`:
 //!   * Tools array is ONLY integration tools, no computer/open_url/etc.
