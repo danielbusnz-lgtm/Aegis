@@ -13,13 +13,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
+        # crossplatform feature still pulls in GTK3 on Linux via global-hotkey,
+        # plus xcb/randr/X11 deps for xcap screenshots. libgtk-3-dev provides
+        # gdk-3.0 + glib + gobject; libasound for cpal; libxkbcommon/libwayland
+        # for winit.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev \
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
-            libglib2.0-dev \
             libxcb1-dev \
             libxrandr-dev \
             libxss-dev \
