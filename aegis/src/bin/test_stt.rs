@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Isolated test for the mic → Deepgram pipeline with full timing.
 //
 // Run with `cargo run --bin test_stt`.

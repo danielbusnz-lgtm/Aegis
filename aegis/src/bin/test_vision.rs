@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../screenshot/mod.rs"]
 mod screenshot;
 

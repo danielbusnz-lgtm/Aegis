@@ -1,3 +1,7 @@
+// Test bins import the whole providers/audio/screenshot module tree but only
+// touch a slice. Silences false-positive dead-code lints from the rest.
+#![allow(dead_code)]
+
 //! Deepgram STT benchmark over a fixed audio file.
 //!
 //! Loops the same WAV through the real `transcribe_stream` path N times,

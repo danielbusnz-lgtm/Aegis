@@ -148,21 +148,36 @@ impl Claude {
             );
 
             let t_build = std::time::Instant::now();
+            let tools_value = tools_array_value(declared_w, declared_h, integration_tools.clone());
             let body = serde_json::json!({
                 "model": "claude-haiku-4-5",
                 "max_tokens": 1024,
                 "stream": true,
                 "system": system,
-                "tools": tools_array_value(declared_w, declared_h, integration_tools.clone()),
+                "tools": tools_value.clone(),
                 "messages": messages,
             });
             let body_size_kb = serde_json::to_vec(&body)
                 .map(|v| v.len() / 1024)
                 .unwrap_or(0);
+
+            // Hash the cacheable prefix (system + tools) so we can spot when
+            // it varies between turns. If the hash changes turn-to-turn,
+            // prompt caching can't hit. Should be identical across an
+            // entire session — if not, something is leaking into the
+            // prefix that shouldn't be.
+            let cache_prefix_hash = {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                serde_json::to_vec(&system).unwrap_or_default().hash(&mut h);
+                serde_json::to_vec(&tools_value).unwrap_or_default().hash(&mut h);
+                h.finish()
+            };
             eprintln!(
-                "[agent-loop] step {} body built ({} KB) in {:?}",
+                "[agent-loop] step {} body built ({} KB, prefix_hash=0x{:x}) in {:?}",
                 step + 1,
                 body_size_kb,
+                cache_prefix_hash,
                 t_build.elapsed()
             );
 

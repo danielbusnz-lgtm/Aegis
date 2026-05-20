@@ -65,6 +65,25 @@ pub(super) fn tools_array_value(
     .clone();
 
     tools.extend(extra_tools);
+
+    // Anthropic prompt caching: a cache_control marker on the LAST tool
+    // tells Anthropic to cache the whole prefix (system + tools). Subsequent
+    // requests within the 5-minute TTL pay ~10% input-token cost on this
+    // prefix and skip the preprocessing step → faster TTFT on every turn
+    // after the first. The user transcript and screenshots in `messages`
+    // are AFTER this breakpoint and remain uncached, so they ship fresh
+    // each turn. Watch [sse-debug] message_start usage:
+    //   cache_creation_input_tokens > 0 on first turn (write)
+    //   cache_read_input_tokens > 0 on subsequent turns (hit)
+    if let Some(last) = tools.last_mut() {
+        if let Some(obj) = last.as_object_mut() {
+            obj.insert(
+                "cache_control".to_string(),
+                serde_json::json!({ "type": "ephemeral" }),
+            );
+        }
+    }
+
     serde_json::Value::Array(tools)
 }
 
@@ -249,5 +268,60 @@ fn parse_custom_tool(tool_name: &str, input: &serde_json::Value) -> Option<Actio
             target: s.to_string(),
         }),
         _ => Some(Action::Integration),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Anthropic prompt caching only kicks in if every request marks the
+    /// SAME prefix boundary. If a future refactor strips the cache_control
+    /// field off the last tool, requests still succeed but cost ~10x more
+    /// and every TTFT jumps ~300-500ms — a silent performance regression.
+    /// This test fails loudly if the marker disappears.
+    #[test]
+    fn last_tool_has_cache_control_marker() {
+        let tools = tools_array_value(1280, 800, vec![]);
+        let arr = tools
+            .as_array()
+            .expect("tools_array_value should return a JSON array");
+        let last = arr
+            .last()
+            .expect("tools array should be non-empty");
+        let cache_control = last.get("cache_control").unwrap_or_else(|| {
+            panic!(
+                "last tool is missing the cache_control marker — prompt caching is OFF.\nlast tool was: {}",
+                serde_json::to_string_pretty(last).unwrap_or_default()
+            )
+        });
+        assert_eq!(
+            cache_control,
+            &serde_json::json!({ "type": "ephemeral" }),
+            "cache_control shape changed; Anthropic expects {{ type: ephemeral }}"
+        );
+    }
+
+    /// Extra defense: the marker should ALSO survive integration tools
+    /// being added to the array. integrations::all_tools() is the real
+    /// caller, so the marker needs to land on the last appended tool, not
+    /// the last hardcoded one.
+    #[test]
+    fn cache_control_on_last_tool_with_extras() {
+        let extra = vec![
+            serde_json::json!({ "name": "fake_extra_tool", "input_schema": {} }),
+        ];
+        let tools = tools_array_value(1280, 800, extra);
+        let arr = tools.as_array().expect("array");
+        let last = arr.last().expect("non-empty");
+        assert_eq!(
+            last.get("name").and_then(|v| v.as_str()),
+            Some("fake_extra_tool"),
+            "extra tool should be appended last"
+        );
+        assert!(
+            last.get("cache_control").is_some(),
+            "cache_control must land on the LAST tool after extras are appended"
+        );
     }
 }

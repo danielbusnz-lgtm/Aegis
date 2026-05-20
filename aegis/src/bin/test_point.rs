@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../ai_cursor/mod.rs"]
 mod ai_cursor;
 #[path = "../mouse_position/mod.rs"]
