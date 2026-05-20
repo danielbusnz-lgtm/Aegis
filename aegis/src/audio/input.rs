@@ -409,11 +409,10 @@ fn default_source_alsa_card_id() -> Option<String> {
             in_target_block = name == default_source;
             continue;
         }
-        if in_target_block {
-            if let Some(rest) = trimmed.strip_prefix("alsa.id = ") {
+        if in_target_block
+            && let Some(rest) = trimmed.strip_prefix("alsa.id = ") {
                 return Some(rest.trim_matches('"').to_string());
             }
-        }
     }
     None
 }

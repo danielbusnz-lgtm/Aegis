@@ -716,11 +716,10 @@ fn speak_error(
 fn find_sentence_end(buf: &str) -> Option<usize> {
     let bytes = buf.as_bytes();
     for i in 0..bytes.len() {
-        if matches!(bytes[i], b'.' | b'!' | b'?') {
-            if i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
+        if matches!(bytes[i], b'.' | b'!' | b'?')
+            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t')) {
                 return Some(i);
             }
-        }
     }
     None
 }
@@ -732,16 +731,14 @@ fn find_first_flush_point(buf: &str) -> Option<usize> {
     use crate::tuning::TTS_FIRST_FLUSH_MIN_CHARS as MIN_LEN;
     let bytes = buf.as_bytes();
     for i in 0..bytes.len() {
-        if matches!(bytes[i], b'.' | b'!' | b'?') {
-            if i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
+        if matches!(bytes[i], b'.' | b'!' | b'?')
+            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t')) {
                 return Some(i);
             }
-        }
-        if i >= MIN_LEN && matches!(bytes[i], b',' | b';' | b':') {
-            if i + 1 < bytes.len() && matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
+        if i >= MIN_LEN && matches!(bytes[i], b',' | b';' | b':')
+            && i + 1 < bytes.len() && matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
                 return Some(i);
             }
-        }
     }
     None
 }

@@ -75,14 +75,13 @@ pub(super) fn tools_array_value(
     // each turn. Watch [sse-debug] message_start usage:
     //   cache_creation_input_tokens > 0 on first turn (write)
     //   cache_read_input_tokens > 0 on subsequent turns (hit)
-    if let Some(last) = tools.last_mut() {
-        if let Some(obj) = last.as_object_mut() {
+    if let Some(last) = tools.last_mut()
+        && let Some(obj) = last.as_object_mut() {
             obj.insert(
                 "cache_control".to_string(),
                 serde_json::json!({ "type": "ephemeral" }),
             );
         }
-    }
 
     serde_json::Value::Array(tools)
 }
@@ -233,11 +232,10 @@ pub(super) fn parse_tool_call(
 /// Parse a coordinate field that may be either a JSON array `[x, y]` or a
 /// JSON string `"[x, y]"`. Returns (x, y) as i64.
 fn extract_coordinate(value: &serde_json::Value) -> Option<(i64, i64)> {
-    if let Some(arr) = value.as_array() {
-        if arr.len() == 2 {
+    if let Some(arr) = value.as_array()
+        && arr.len() == 2 {
             return Some((arr[0].as_i64()?, arr[1].as_i64()?));
         }
-    }
     if let Some(s) = value.as_str() {
         // Strip brackets/whitespace, split on comma.
         let trimmed = s.trim().trim_start_matches('[').trim_end_matches(']');

@@ -166,13 +166,11 @@ impl TtsCartesia {
                     let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else {
                         continue;
                     };
-                    if event["type"] == "chunk" {
-                        if let Some(b64) = event["data"].as_str() {
-                            if let Ok(pcm) = BASE64.decode(b64) {
+                    if event["type"] == "chunk"
+                        && let Some(b64) = event["data"].as_str()
+                            && let Ok(pcm) = BASE64.decode(b64) {
                                 on_chunk(&pcm);
                             }
-                        }
-                    }
                 }
             }
         }

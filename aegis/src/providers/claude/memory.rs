@@ -268,11 +268,9 @@ impl Claude {
                         Some("content_block_delta") => {
                             if in_tool
                                 && event["delta"]["type"].as_str() == Some("input_json_delta")
-                            {
-                                if let Some(j) = event["delta"]["partial_json"].as_str() {
+                                && let Some(j) = event["delta"]["partial_json"].as_str() {
                                     tool_json_buffer.push_str(j);
                                 }
-                            }
                         }
                         _ => {}
                     }

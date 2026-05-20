@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Isolated first-run OAuth + Gmail integration smoke test.
 //
 // Run: cargo run --bin test_gmail

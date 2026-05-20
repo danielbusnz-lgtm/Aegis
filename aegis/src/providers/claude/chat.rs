@@ -103,12 +103,10 @@ impl Claude {
                     };
                     if event["type"].as_str() == Some("content_block_delta")
                         && event["delta"]["type"].as_str() == Some("text_delta")
-                    {
-                        if let Some(t) = event["delta"]["text"].as_str() {
+                        && let Some(t) = event["delta"]["text"].as_str() {
                             text_content.push_str(t);
                             on_text_delta(t);
                         }
-                    }
                 }
             }
         }

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Standalone visual test for a loading-state animation.
 // Classic iOS-style radial spinner: N bars arranged in a circle, each fading
 // based on its position behind a rotating "head" bar. The head sweeps around

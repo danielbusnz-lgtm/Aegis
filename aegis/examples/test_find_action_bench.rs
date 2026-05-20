@@ -176,7 +176,7 @@ fn run_once(
         .map(|c| c.to_vec())
         .collect();
 
-    let stt_start = Instant::now();
+    let _stt_start = Instant::now();
     let replay = rt.spawn(async move {
         for chunk in chunks {
             if tx.send(chunk).is_err() {

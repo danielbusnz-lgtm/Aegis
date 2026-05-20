@@ -149,15 +149,14 @@ impl Claude {
                             }
                         }
                         Some("content_block_delta") => {
-                            if event["delta"]["type"].as_str() == Some("input_json_delta") {
-                                if let Some(j) = event["delta"]["partial_json"].as_str() {
+                            if event["delta"]["type"].as_str() == Some("input_json_delta")
+                                && let Some(j) = event["delta"]["partial_json"].as_str() {
                                     tool_json_buffer.push_str(j);
                                 }
-                            }
                         }
                         Some("content_block_stop") => {
-                            if emitted.is_none() {
-                                if let Some(name) = current_tool_name.take() {
+                            if emitted.is_none()
+                                && let Some(name) = current_tool_name.take() {
                                     let input_json = if tool_json_buffer.is_empty() {
                                         "{}".to_string()
                                     } else {
@@ -187,7 +186,6 @@ impl Claude {
                                     }
                                     tool_json_buffer.clear();
                                 }
-                            }
                         }
                         _ => {}
                     }

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Smoke test for the github integration tools.
 // Run: cargo run --bin test_github
 

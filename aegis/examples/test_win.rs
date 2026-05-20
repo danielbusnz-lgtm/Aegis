@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // End-to-end smoke test for the cross-platform pieces.
 //
 // Exercises: hotkey + mouse + screenshot + cursor (incl. click-through)

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Standalone visual test for a soundwave / equalizer-style listening animation.
 //
 // Renders N vertical bars that bob up and down at slightly different

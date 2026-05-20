@@ -11,7 +11,13 @@ mod memory;
 mod parsing;
 mod prompt;
 
+// Re-exports for the aegis binary's use. Examples that pull in providers/
+// via #[path] but don't touch Intent or MemoryStore see these as unused;
+// the allow silences that false-positive warning without affecting the
+// real aegis binary, which uses both.
+#[allow(unused_imports)]
 pub use classifier::Intent;
+#[allow(unused_imports)]
 pub use memory::MemoryStore;
 
 /// A side-effecting action Claude requested via one of the tools in

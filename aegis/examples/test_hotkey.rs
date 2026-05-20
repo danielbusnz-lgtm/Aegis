@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Isolated test for the hotkey signal pipeline. Verifies that:
 //   1. Hyprland's keybind is sending SIGUSR1/SIGUSR2 to the running aegis pid
 //   2. signal_hook's listener thread is catching them

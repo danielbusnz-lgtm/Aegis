@@ -735,13 +735,11 @@ fn extract_body(payload: &serde_json::Value) -> String {
 
     let mime = payload["mimeType"].as_str().unwrap_or("");
 
-    if mime == "text/plain" {
-        if let Some(data) = payload["body"]["data"].as_str() {
-            if let Ok(bytes) = URL_SAFE_NO_PAD.decode(data.trim_end_matches('=')) {
+    if mime == "text/plain"
+        && let Some(data) = payload["body"]["data"].as_str()
+            && let Ok(bytes) = URL_SAFE_NO_PAD.decode(data.trim_end_matches('=')) {
                 return String::from_utf8_lossy(&bytes).into_owned();
             }
-        }
-    }
 
     if let Some(parts) = payload["parts"].as_array() {
         let plain = parts.iter().find(|p| p["mimeType"] == "text/plain");

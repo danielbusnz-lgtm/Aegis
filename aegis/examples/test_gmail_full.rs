@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // End-to-end exercise of every gmail integration tool.
 //
 // Sends one self-addressed test email, then runs the other six tools

@@ -118,11 +118,9 @@ impl Claude {
                         Some("content_block_delta") => {
                             if current_block_is_tool
                                 && event["delta"]["type"].as_str() == Some("input_json_delta")
-                            {
-                                if let Some(j) = event["delta"]["partial_json"].as_str() {
+                                && let Some(j) = event["delta"]["partial_json"].as_str() {
                                     tool_json_buffer.push_str(j);
                                 }
-                            }
                         }
                         _ => {}
                     }
@@ -230,12 +228,10 @@ impl Claude {
                     };
                     if event["type"].as_str() == Some("content_block_delta")
                         && event["delta"]["type"].as_str() == Some("text_delta")
-                    {
-                        if let Some(t) = event["delta"]["text"].as_str() {
+                        && let Some(t) = event["delta"]["text"].as_str() {
                             text_content.push_str(t);
                             on_text_delta(t);
                         }
-                    }
                 }
             }
         }

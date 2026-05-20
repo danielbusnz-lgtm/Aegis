@@ -284,8 +284,8 @@ impl Claude {
                                     if let Some(j) = event["delta"]["partial_json"].as_str() {
                                         tool_json_buffer.push_str(j);
                                     }
-                                } else if delta_type == Some("text_delta") {
-                                    if let Some(t) = event["delta"]["text"].as_str() {
+                                } else if delta_type == Some("text_delta")
+                                    && let Some(t) = event["delta"]["text"].as_str() {
                                         text_content.push_str(t);
                                         // Always forward to the caller. The
                                         // orchestrator gates speech via
@@ -294,7 +294,6 @@ impl Claude {
                                         // deltas one layer up.
                                         on_text_delta(t);
                                     }
-                                }
                             }
                             Some("message_stop") | Some("ping") => {
                                 // Expected, no-op. Listed so the catch-all
