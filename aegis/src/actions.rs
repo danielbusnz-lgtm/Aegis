@@ -10,31 +10,23 @@ use std::sync::mpsc::{Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-/// Input-injection commands serialized through one executor thread so that
-/// "click then type" intents land in the right order regardless of how the
-/// Claude SSE callback fires them.
-///
-/// Without serialization, a tool_use stream that emits `left_click` then
-/// `type` could race: the type might land before the click registers
-/// focus, and the text would end up in whatever was previously focused.
+/// Commands serialized through one executor thread to preserve ordering
+/// across async SSE callbacks (e.g. click-then-type must stay in that
+/// order even though both arrive via the same callback fast enough to
+/// race ydotool's per-call latency).
 enum InputCmd {
-    /// Move the OS cursor and fire a left-button down+up at (x, y).
+    /// Moves the OS cursor to (x, y) and fires a left button down+up.
     Click { x: i64, y: i64 },
-    /// Type literal text into the currently-focused field. Trailing `\n`
-    /// submits (Enter).
+    /// Trailing `\n` in `text` submits (fires Enter after typing).
     Type { text: String },
-    /// Press a key or key combo. `combo` is human syntax like "Return",
-    /// "ctrl+a", "alt+f4"; parsed into scancodes by `key_name_to_scancode`.
+    /// `combo` is human syntax like "Return", "ctrl+a"; parsed by `key_name_to_scancode`.
     Key { combo: String },
-    /// Fake a scroll by sending repeated arrow-key presses. `direction`
-    /// is up/down/left/right; `amount` is approximate wheel-clicks.
+    /// `amount` is wheel-clicks; mapped to arrow-key presses by `exec_scroll`.
     Scroll { direction: String, amount: u32 },
 }
 
-/// Sender into the input executor thread, populated by
-/// `init_input_executor()` at startup. `OnceLock` so it survives the
-/// from-anywhere call sites (no plumbing required) and so a second
-/// `init_input_executor()` call is a clean no-op rather than a panic.
+/// Set by `init_input_executor` at startup. OnceLock makes the static
+/// callable from anywhere without plumbing and makes double-init a no-op.
 static INPUT_TX: OnceLock<Sender<InputCmd>> = OnceLock::new();
 
 /// Open a URL in the user's currently-focused browser when possible, falling
@@ -163,9 +155,8 @@ fn focused_browser_binary() -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// True if `which <bin>` succeeds. Pipes its output to /dev/null so the
-/// search doesn't pollute our stderr — the `bin` lookup is best-effort
-/// and a miss isn't a failure worth logging.
+/// True iff `which <bin>` succeeds. Output suppressed because misses are
+/// expected (caller probes several candidates).
 fn binary_on_path(bin: &str) -> bool {
     Command::new("which")
         .arg(bin)
@@ -192,13 +183,10 @@ pub fn launch_app(app: &str) {
     }
 }
 
-/// Focus an already-running window. Tries class match first, then title
-/// match a moment later as a fallback (non-matches fail silently in hyprctl).
-///
-/// We fire both because Claude's `target` is whatever phrase the user
-/// said — sometimes it matches a class (e.g. "firefox"), sometimes a
-/// title substring (e.g. "Inbox" for a Gmail tab). The first dispatch
-/// usually wins; the title fallback is cheap insurance.
+/// Focuses a window matching `target` as a class first, then as a title
+/// substring 150ms later. Claude's `target` is whatever the user said,
+/// which is ambiguous between class names ("firefox") and title text
+/// ("Inbox"), so we try both. Non-matches fail silently in hyprctl.
 pub fn switch_to_window(target: &str) {
     eprintln!("[action:switch_to_window] focusing '{}'", target);
     let _ = Command::new("hyprctl")
@@ -206,9 +194,8 @@ pub fn switch_to_window(target: &str) {
         .spawn();
     let target = target.to_string();
     thread::spawn(move || {
-        // 150ms: longer than hyprctl's own dispatch round-trip (~30ms)
-        // so the class-match attempt finishes first, but short enough
-        // that a real fallback feels instant. Tuned empirically.
+        // > hyprctl dispatch round-trip (~30ms) so the class attempt
+        // resolves first; < perceptual instant.
         thread::sleep(Duration::from_millis(150));
         let _ = Command::new("hyprctl")
             .args(["dispatch", "focuswindow", &format!("title:{}", target)])
@@ -216,21 +203,13 @@ pub fn switch_to_window(target: &str) {
     });
 }
 
-/// Hyprland blocks focus-stealing per the XDG activation protocol, so a new
-/// browser tab opens but the window doesn't come forward. Dispatch focus to
-/// every common browser class after a short delay; non-matches no-op.
-///
-/// We don't know which browser class the new tab landed in (could be
-/// `firefox`, `Chromium`, etc., and Chromium-family capitalize
-/// inconsistently across distros), so we fire focuswindow at all of them
-/// and let hyprctl silently drop the misses.
+/// Works around Hyprland's XDG-activation focus-steal block by dispatching
+/// focuswindow at every common browser class after the new window is
+/// likely to exist. Misses no-op.
 fn raise_likely_browser() {
     thread::spawn(|| {
-        // 300ms: gives the browser process time to create its window
-        // and register with Hyprland's client tracking. Shorter than
-        // this and the focuswindow dispatch races the window's
-        // appearance — Hyprland sees no matching client and the focus
-        // never lands. Found empirically; varies a bit by browser.
+        // Below ~300ms the focuswindow dispatch can race the browser's
+        // window creation, leaving Hyprland with no matching client.
         thread::sleep(Duration::from_millis(300));
         for class in &[
             "firefox",
@@ -295,10 +274,8 @@ pub fn scroll(direction: &str, amount: u32) {
     });
 }
 
-/// Push an input command into the executor's queue. Drops the command
-/// (with a loud log) if `init_input_executor()` hasn't run yet — this
-/// should never happen since main.rs calls it before any voice turn,
-/// but the log catches accidental re-orderings during refactors.
+/// Drops the command (loud log) if `init_input_executor` hasn't run.
+/// Indicates a startup-order regression, not normal flow.
 fn enqueue(cmd: InputCmd) {
     match INPUT_TX.get() {
         Some(tx) => {
@@ -313,20 +290,14 @@ fn enqueue(cmd: InputCmd) {
     }
 }
 
-/// Start the single-threaded input executor. Must be called exactly once,
-/// at startup, before any click or type can fire. Subsequent calls no-op.
+/// Starts the single-threaded input executor. Must be called once at
+/// startup, before any click/type/key/scroll can fire. Idempotent: a
+/// second call is silently ignored.
 pub fn init_input_executor() {
     let (tx, rx) = channel::<InputCmd>();
-    // OnceLock::set returns Err iff already initialized. Silently
-    // accept that — no point panicking on a double-init from misordered
-    // startup code; the existing executor is fine.
     if INPUT_TX.set(tx).is_err() {
         return;
     }
-    // Single worker thread. Channel ordering = command ordering, which
-    // is the whole point of going through this executor — click→type
-    // sequences from a single SSE callback land in the order Claude
-    // emitted them even though ydotool calls block for tens of ms.
     thread::spawn(move || {
         while let Ok(cmd) = rx.recv() {
             match cmd {
@@ -339,18 +310,15 @@ pub fn init_input_executor() {
     });
 }
 
-/// Execute a scroll by sending repeated arrow-key presses to the focused
-/// window. Wayland has no clean "scroll at point" primitive without raw
-/// evdev, so arrow keys are the portable approximation that works in
+/// Fakes a scroll via repeated arrow-key presses. Wayland has no
+/// portable "scroll at point" without raw evdev; arrow keys work in
 /// browsers, terminals, file managers, and most native apps.
 fn exec_scroll(direction: &str, amount: u32) {
-    // Map direction to the corresponding arrow-key scancode. Anything we
-    // don't recognize falls back to Down arrow.
     let scancode: u16 = match direction.to_lowercase().as_str() {
-        "down" => 108,  // KEY_DOWN
-        "up" => 103,    // KEY_UP
-        "left" => 105,  // KEY_LEFT
-        "right" => 106, // KEY_RIGHT
+        "down" => 108,
+        "up" => 103,
+        "left" => 105,
+        "right" => 106,
         other => {
             eprintln!(
                 "[action:scroll] unknown direction '{}', defaulting to down",
@@ -359,13 +327,9 @@ fn exec_scroll(direction: &str, amount: u32) {
             108
         }
     };
-    // 3 arrow presses per "wheel click" roughly matches the GTK default
-    // for mouse-wheel scroll line count, so amounts feel natural to
-    // users coming from a physical wheel.
-    //
-    // Cap at 30 because Claude occasionally emits amount=99 when it
-    // really means "scroll all the way" — without the cap, that hangs
-    // the UI for several seconds firing arrow keys.
+    // 3 presses/wheel-click matches GTK's default scroll-line count.
+    // Cap at 30 because Claude sometimes emits amount=99 meaning "scroll
+    // to the end" — uncapped that hangs the UI firing arrow keys.
     let presses = (amount.saturating_mul(3)).clamp(1, 30);
 
     let mut args: Vec<String> = vec!["key".to_string()];
@@ -379,8 +343,7 @@ fn exec_scroll(direction: &str, amount: u32) {
     }
 }
 
-/// Move the OS cursor to (x, y) and fire a left-button click via ydotool.
-/// Coordinates are absolute screen pixels (not workspace-relative).
+/// Moves the OS cursor to absolute screen pixel (x, y) and clicks.
 fn exec_click(x: i64, y: i64) {
     let move_status = Command::new("ydotool")
         .args([
@@ -396,37 +359,28 @@ fn exec_click(x: i64, y: i64) {
         eprintln!("[action:click] mousemove failed: {}", e);
         return;
     }
-    // 30ms gap so the OS-level mousemove event lands before the click
-    // dispatches. Without it, apps with their own pointer debouncing
-    // (~10ms typical) sometimes register the click at the cursor's
-    // *previous* position. 30ms is comfortably above that floor.
+    // Above the ~10ms pointer-debounce floor so the click registers at
+    // the new position, not the previous one.
     thread::sleep(Duration::from_millis(30));
-    // 0xC0 = BTN_LEFT down + up combined (ydotool's click encoding).
+    // 0xC0 = BTN_LEFT down+up combined in ydotool's encoding.
     if let Err(e) = Command::new("ydotool").args(["click", "0xC0"]).status() {
         eprintln!("[action:click] click failed: {}", e);
     }
 }
 
-/// Type literal text into the currently-focused field via ydotool.
-/// A trailing `\n` in `text` causes Enter to fire after the last
-/// character — used for "search for X" / "send message X" intents
-/// where the caller doesn't want to emit a separate Key command.
+/// Types `text` into the focused field. Trailing `\n` submits (Enter).
 fn exec_type(text: &str) {
-    // 80ms settle after any focus-changing action that came before
-    // (e.g. a click on a search bar). Without it, the first few
-    // keystrokes can land before the field is ready and get dropped.
-    // 80ms covers GTK/Qt focus-handling delays plus some headroom.
+    // Covers GTK/Qt focus-handling delay after a preceding click;
+    // without it the first few keystrokes get dropped.
     thread::sleep(Duration::from_millis(80));
-    // `--` separates the text from ydotool's own flags so a string
-    // starting with `-` doesn't get interpreted as an option.
+    // `--` so a `text` starting with `-` isn't parsed as a flag.
     if let Err(e) = Command::new("ydotool").args(["type", "--", text]).status() {
         eprintln!("[action:type] type failed: {}", e);
     }
 }
 
-/// Press a key or key combo via ydotool. The combo is split on `+` and
-/// each part is resolved to a Linux scancode via `key_name_to_scancode`.
-/// Unrecognized parts get silently dropped (logged for debugging).
+/// Press a key combo. `combo` is split on `+`; unrecognized parts get
+/// dropped (logged).
 fn exec_key(combo: &str) {
     let scancodes: Vec<u16> = combo
         .split('+')
@@ -448,9 +402,8 @@ fn exec_key(combo: &str) {
         args.push(format!("{}:0", sc));
     }
 
-    // 50ms settle for the same reason as exec_type but shorter — key
-    // combos usually fire on already-focused windows (hotkeys, form
-    // submission) rather than right after a click.
+    // Shorter than exec_type because combos typically hit
+    // already-focused windows (hotkeys, form submit).
     thread::sleep(Duration::from_millis(50));
     if let Err(e) = Command::new("ydotool").args(&args).status() {
         eprintln!("[action:key] ydotool key '{}' failed: {}", combo, e);
