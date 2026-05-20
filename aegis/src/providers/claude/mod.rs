@@ -54,6 +54,7 @@ pub enum Action {
     Integration,
 }
 
+#[derive(Clone)]
 pub struct Claude {
     pub http: reqwest::Client,
     /// Full URL to POST messages requests to. Either the hosted proxy or

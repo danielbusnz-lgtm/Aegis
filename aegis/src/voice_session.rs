@@ -5,7 +5,7 @@
 //! because `cpal::Stream` is `!Send`.
 
 use crate::audio;
-use crate::providers::claude::Claude;
+use crate::providers::claude::{Claude, MemoryStore};
 use crate::providers::stt_deepgram::SttDeepgram;
 use crate::providers::tts_cartesia::TtsCartesia;
 
@@ -16,6 +16,7 @@ pub struct VoiceSession {
     pub stt: SttDeepgram,
     pub claude: Claude,
     pub cartesia: TtsCartesia,
+    pub memory: MemoryStore,
 }
 
 impl VoiceSession {
@@ -50,6 +51,12 @@ impl VoiceSession {
         // out a fresh Player against this sink (~free).
         let audio_out = audio::AudioOutput::init().expect("could not open audio output");
 
+        // Load persistent memory facts (name, preferences, etc.). Empty
+        // store on first launch; subsequent launches re-load from
+        // ~/.config/aegis/memory.jsonl.
+        let memory = MemoryStore::open_default()
+            .expect("could not open aegis memory store");
+
         VoiceSession {
             rt,
             mic: running_mic,
@@ -57,6 +64,7 @@ impl VoiceSession {
             stt,
             claude,
             cartesia,
+            memory,
         }
     }
 }
