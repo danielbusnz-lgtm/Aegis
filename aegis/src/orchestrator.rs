@@ -1,8 +1,8 @@
+use crate::ai_cursor;
 use crate::audio;
 use crate::barge_in::BargeIn;
-use crate::ai_cursor;
 use crate::hotkey;
-use crate::intent::{is_integration_intent, wants_description};
+use crate::intent::{is_visual_query, wants_description};
 use crate::providers::claude::Claude;
 use crate::providers::stt_deepgram::SttDeepgram;
 use crate::providers::tts_cartesia::TtsCartesia;
@@ -24,6 +24,7 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
     println!("aegis ready — hold SUPER+space to talk");
     loop {
         hotkey::wait_for_press();
+        let press_t = std::time::Instant::now();
 
         // Pre-capture the screenshot AND pre-resize for Computer Use, in
         // parallel with recording + streaming STT. The resize is now ~41ms
@@ -47,7 +48,7 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
                     Ok((x, y, w, h, resized_b64))
                 });
 
-        if let Err(e) = run_one_turn(&session, screenshot_task) {
+        if let Err(e) = run_one_turn(&session, press_t, screenshot_task) {
             eprintln!("voice turn failed: {}", e);
         }
     }
@@ -55,6 +56,7 @@ pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: Tts
 
 fn run_one_turn(
     session: &VoiceSession,
+    press_t: std::time::Instant,
     screenshot_task: tokio::task::JoinHandle<Result<(i32, i32, u32, u32, String), String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Unpack session resources as locals so the rest of the function body
@@ -96,7 +98,10 @@ fn run_one_turn(
     // ────── phase 2: await transcript & screenshot ──────
     // T = 0: user just released the hotkey. Measure everything from here.
     let release_t = std::time::Instant::now();
-    eprintln!("[timing] release → 0ms");
+    eprintln!(
+        "[timing] release → 0ms (hold={:?})",
+        release_t.duration_since(press_t)
+    );
 
     // Audio tx was dropped at the end of record_stream → Deepgram saw EOS
     // → final transcript should arrive ~100-300ms later via the WS.
@@ -104,6 +109,7 @@ fn run_one_turn(
         .block_on(stt_handle)
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+    eprintln!("[timing] transcript ready → {:?}", release_t.elapsed());
     println!("you said: {}", transcript);
 
     // Guard: if the user said nothing, skip the rest of the turn.
@@ -233,20 +239,22 @@ fn run_one_turn(
     // style queries ("click X", "where is Y") get silent action; everything
     // else gets TTS of the agent loop's final text.
     let want_speech = wants_description(&transcript);
-    // For clear integration-tool queries, skip uploading the screenshot on
-    // step 1. Claude doesn't need pixels to decide on gmail_search /
-    // gh_my_issues / spotify_play. Saves ~700ms of HTTP body upload.
-    let skip_initial_screenshot = is_integration_intent(&transcript);
+    // Default to NOT sending a screenshot. Only attach if the query has a
+    // strong visual signal (asking about something on screen, pointing,
+    // clicking, etc.). Skipping saves ~700ms upload + ~1500 input tokens
+    // per turn, and stops Claude from narrating the screen on conversational
+    // queries like "what is your name?".
+    let attach_screenshot = is_visual_query(&transcript);
     eprintln!(
-        "[query] {} → speak={} skip_screenshot={}",
+        "[query] {} → speak={} attach_screenshot={}",
         transcript.trim(),
         want_speech,
-        skip_initial_screenshot
+        attach_screenshot
     );
-    let initial_screenshot: &str = if skip_initial_screenshot {
-        ""
-    } else {
+    let initial_screenshot: &str = if attach_screenshot {
         resized_b64.as_str()
+    } else {
+        ""
     };
 
     let cancel_claude = barge_in.token();
@@ -292,6 +300,18 @@ fn run_one_turn(
         let sentence_tx_for_cb = sentence_tx.clone();
         let stream_to_tts = want_speech;
 
+        // Latch for the "first sign Claude has responded" timing log. Tripped
+        // by whichever fires first: the action callback or the text-delta
+        // callback. Wrapped in Rc<Cell> because both callbacks share it and
+        // they're !Send (running on the LocalSet via block_on).
+        let first_claude_logged = std::rc::Rc::new(std::cell::Cell::new(false));
+        let first_claude_action = first_claude_logged.clone();
+        let first_claude_delta = first_claude_logged.clone();
+        // Same pattern for the first sentence handed off to Cartesia. Lets us
+        // see Cartesia's TTS TTFT (first sentence sent → first PCM chunk).
+        let first_sentence_logged = std::rc::Rc::new(std::cell::Cell::new(false));
+        let first_sentence_delta = first_sentence_logged.clone();
+
         let early_exit_action = early_exit.clone();
         let user_email = crate::integrations::gmail::user_email();
         let cursor_task = claude.run_agent_loop(
@@ -308,6 +328,9 @@ fn run_one_turn(
             take_screenshot,
             |action| {
                 use crate::providers::claude::Action;
+                if !first_claude_action.replace(true) {
+                    eprintln!("[timing] claude first response → {:?}", release_t.elapsed());
+                }
                 eprintln!(
                     "\n[timing] ACTION FIRES → {:?}: {:?}",
                     release_t.elapsed(),
@@ -366,6 +389,9 @@ fn run_one_turn(
                 result
             },
             move |delta: &str| {
+                if !first_claude_delta.replace(true) {
+                    eprintln!("[timing] claude first response → {:?}", release_t.elapsed());
+                }
                 // Only stream to TTS if the user expects spoken output.
                 if !stream_to_tts {
                     return;
@@ -373,8 +399,21 @@ fn run_one_turn(
                 did_stream_for_cb.set(true);
                 let mut buf = tts_buf_for_cb.borrow_mut();
                 buf.push_str(delta);
-                while let Some(end) = find_sentence_end(&buf) {
+                loop {
+                    // First flush is permissive (clause-level breaks count)
+                    // so Cartesia can start synthesizing on long opening
+                    // sentences as soon as we have a meaningful phrase.
+                    // After that, strict sentence boundaries keep prosody.
+                    let end_opt = if first_sentence_delta.get() {
+                        find_sentence_end(&buf)
+                    } else {
+                        find_first_flush_point(&buf)
+                    };
+                    let Some(end) = end_opt else { break };
                     let sentence: String = buf.drain(..=end).collect();
+                    if !first_sentence_delta.replace(true) {
+                        eprintln!("[timing] first sentence → tts → {:?}", release_t.elapsed());
+                    }
                     let _ = sentence_tx_for_cb.send(sentence);
                 }
             },
@@ -409,6 +448,12 @@ fn run_one_turn(
                                 // with no terminator).
                                 let tail = tts_buf.borrow().trim().to_string();
                                 if !tail.is_empty() {
+                                    if !first_sentence_logged.replace(true) {
+                                        eprintln!(
+                                            "[timing] first sentence → tts → {:?}",
+                                            release_t.elapsed()
+                                        );
+                                    }
                                     let _ = sentence_tx.send(tail);
                                 }
                             } else {
@@ -421,11 +466,23 @@ fn run_one_turn(
                                     while let Some(end) = find_sentence_end(&buf) {
                                         let sentence: String =
                                             buf.drain(..=end).collect();
+                                        if !first_sentence_logged.replace(true) {
+                                            eprintln!(
+                                                "[timing] first sentence → tts → {:?}",
+                                                release_t.elapsed()
+                                            );
+                                        }
                                         let _ = sentence_tx.send(sentence);
                                     }
                                 }
                                 let tail = buf.trim();
                                 if !tail.is_empty() {
+                                    if !first_sentence_logged.replace(true) {
+                                        eprintln!(
+                                            "[timing] first sentence → tts → {:?}",
+                                            release_t.elapsed()
+                                        );
+                                    }
                                     let _ = sentence_tx.send(tail.to_string());
                                 }
                             }
@@ -494,6 +551,32 @@ fn find_sentence_end(buf: &str) -> Option<usize> {
     for i in 0..bytes.len() {
         if matches!(bytes[i], b'.' | b'!' | b'?') {
             if i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// Permissive boundary finder used only for the FIRST flush of a turn.
+/// Accepts strong sentence ends (`.`, `!`, `?`) like `find_sentence_end`,
+/// AND clause-level breaks (`,`, `;`, `:`) once at least MIN_LEN bytes have
+/// accumulated before the punctuation. The intent: get Cartesia
+/// synthesizing earlier on long sentences like "I'm Claude, an AI…" by
+/// sending "I'm Claude," the moment the comma arrives, instead of waiting
+/// for the full sentence. After the first send the caller switches back to
+/// `find_sentence_end` so the rest of the response keeps natural prosody.
+fn find_first_flush_point(buf: &str) -> Option<usize> {
+    const MIN_LEN: usize = 12;
+    let bytes = buf.as_bytes();
+    for i in 0..bytes.len() {
+        if matches!(bytes[i], b'.' | b'!' | b'?') {
+            if i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
+                return Some(i);
+            }
+        }
+        if i >= MIN_LEN && matches!(bytes[i], b',' | b';' | b':') {
+            if i + 1 < bytes.len() && matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
                 return Some(i);
             }
         }

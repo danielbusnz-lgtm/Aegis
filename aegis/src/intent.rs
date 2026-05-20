@@ -2,31 +2,48 @@
 //! that decide how the orchestrator should handle a turn: whether the query
 //! needs the screen attached, and whether the answer should be spoken back.
 
-/// True when the transcript clearly points at an integration tool (Gmail,
-/// GitHub, Spotify) rather than something visual on screen. Used to skip
-/// the initial-screenshot upload on step 1 (cuts ~700ms off integration
-/// queries). Substring match against a hardcoded keyword list. Same risk
-/// of phrasing drift as the other heuristics — if it misses, we just keep
-/// the screenshot attached and the query still works.
-pub fn is_integration_intent(transcript: &str) -> bool {
+/// True when the transcript clearly needs the current screen as visual
+/// context. Used as the gate for attaching the initial screenshot to
+/// step 1 of the agent loop.
+///
+/// Default is "no screenshot" because most queries (identity, conversation,
+/// integration commands, general questions) don't need pixels. Sending the
+/// screenshot anyway costs ~700ms upload and ~1500 input tokens per turn,
+/// and biases Claude toward narrating what's on screen when the user
+/// didn't ask. Only attach when the query has a strong visual signal.
+///
+/// If a query is visual but doesn't match these keywords, the user just
+/// gets an answer that ignores the screen. Re-phrasing or following up
+/// with "what's on screen" still works.
+pub fn is_visual_query(transcript: &str) -> bool {
     let padded = format!(" {} ", transcript.trim().to_lowercase());
     const KEYWORDS: &[&str] = &[
-        " mail",
-        " email",
-        " inbox",
-        " unread",
-        " pr ",
-        " prs",
-        " pull request",
-        " issue",
-        " issues",
-        " notification",
-        " github",
-        " repo",
-        " spotify",
-        " song",
-        " track",
-        " playlist",
+        // pointing / locating
+        " where is ",
+        " where's ",
+        " where are ",
+        " point at ",
+        " point to ",
+        // direct interaction with UI
+        " click ",
+        " press ",
+        " tap ",
+        " select ",
+        // explicit references to the screen
+        " on screen",
+        " on the screen",
+        " on my screen",
+        " what's on",
+        " what is on",
+        " look at this",
+        " look at that",
+        " what do you see",
+        " describe ",
+        // UI elements that imply visual targeting
+        " icon",
+        " button",
+        " tab ",
+        " menu",
     ];
     KEYWORDS.iter().any(|k| padded.contains(k))
 }

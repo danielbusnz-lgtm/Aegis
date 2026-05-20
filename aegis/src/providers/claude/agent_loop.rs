@@ -109,11 +109,6 @@ impl Claude {
         })];
 
         let mut final_text = String::new();
-        // When the previous step had only integration tool calls, we expect
-        // this step to be a text-only summary (no tools). Stream text
-        // tokens to the caller via on_text_delta so TTS can start speaking
-        // before the full response is collected.
-        let mut prev_step_was_integration_only = false;
 
         // Build the system prompt once per turn. If the caller passed the
         // user's Gmail address (resolved at startup by the gmail integration
@@ -276,9 +271,12 @@ impl Claude {
                                 } else if delta_type == Some("text_delta") {
                                     if let Some(t) = event["delta"]["text"].as_str() {
                                         text_content.push_str(t);
-                                        if prev_step_was_integration_only {
-                                            on_text_delta(t);
-                                        }
+                                        // Always forward to the caller. The
+                                        // orchestrator gates speech via
+                                        // wants_description(transcript), so
+                                        // action queries already drop these
+                                        // deltas one layer up.
+                                        on_text_delta(t);
                                     }
                                 }
                             }
@@ -498,9 +496,6 @@ impl Claude {
             let keep = if all_integration { 0 } else { KEEP_RECENT_SCREENSHOTS };
             trim_old_screenshots(&mut messages, keep);
 
-            // Heuristic for "next step is the text-only final answer":
-            // this step had tools, and they were all integrations.
-            prev_step_was_integration_only = all_integration;
             eprintln!(
                 "[agent-loop] step {} tool_result + trim in {:?}",
                 step + 1,
