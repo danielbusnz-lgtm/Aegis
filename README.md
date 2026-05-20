@@ -1,4 +1,4 @@
-# aegis
+# Aegis
 
 Voice-controlled AI cursor. Hold INSERT, ask a question, the cursor flies to it.
 
