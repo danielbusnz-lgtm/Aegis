@@ -1,3 +1,12 @@
+//! Deepgram streaming STT over WebSocket. Audio chunks flow in via an
+//! mpsc channel, transcripts build up from interim/final events, and
+//! the final string returns when the upstream sender is dropped (i.e.
+//! the hotkey is released).
+//!
+//! Tail handling: Deepgram fires interim transcripts during speech and
+//! emits is_final events after pauses. Release-to-transcript-ready
+//! latency depends on STT_QUIESCENCE_MS (tuning.rs).
+
 use futures_util::{SinkExt, StreamExt};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedReceiver;

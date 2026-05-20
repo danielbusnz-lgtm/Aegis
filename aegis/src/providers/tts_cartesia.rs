@@ -1,13 +1,26 @@
+//! Cartesia TTS via SSE. POSTs the text to be spoken and streams back
+//! raw PCM chunks; the caller pipes them into rodio as they arrive so
+//! speech starts before the full audio is synthesized.
+//!
+//! Two auth modes: proxy (default, no API key on disk) and direct
+//! (`AEGIS_CARTESIA_DIRECT=1` + `CARTESIA_API_KEY`).
+
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use futures_util::StreamExt;
 
-const DEFAULT_VOICE_ID: &str = "a0e99841-438c-4a64-b679-ae501e7d6091"; // Barbershop Man
+/// Voice fallback when CARTESIA_VOICE_ID isn't set. "Barbershop Man" is
+/// a calm masculine voice that reads aegis's terse replies well.
+const DEFAULT_VOICE_ID: &str = "a0e99841-438c-4a64-b679-ae501e7d6091";
 const MODEL_ID: &str = "sonic-2";
 const PROXY_URL: &str = "https://aegis-proxy.danielbusnz.workers.dev/v1/cartesia/token";
 
-/// Sample rate used for the streaming PCM output. Match this when constructing
-/// rodio SamplesBuffers on the consumer side.
+/// PCM sample rate of the streamed audio. Consumers must construct
+/// rodio SamplesBuffers with this exact rate or speech plays at the
+/// wrong pitch.
 pub const STREAM_SAMPLE_RATE: u32 = 24000;
+
+/// PCM channel count of the streamed audio. Mono only; multi-channel
+/// would just duplicate samples and waste bandwidth.
 pub const STREAM_CHANNELS: u16 = 1;
 
 #[derive(Clone)]
