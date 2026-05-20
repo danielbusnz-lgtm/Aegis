@@ -4,6 +4,7 @@
 
 mod agent_loop;
 mod classifier;
+mod find_action;
 mod parsing;
 mod prompt;
 
