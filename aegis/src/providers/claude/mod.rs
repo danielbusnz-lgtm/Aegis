@@ -6,6 +6,7 @@ mod agent_loop;
 mod chat;
 mod classifier;
 mod find_action;
+mod integration;
 mod parsing;
 mod prompt;
 
