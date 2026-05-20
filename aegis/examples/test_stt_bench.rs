@@ -14,13 +14,13 @@
 //! bursting all the audio at once would give artificially low numbers.
 //!
 //! Usage:
-//!   cargo run --release --bin test_stt_bench -- <wav_path> <expected_text> [iterations]
+//!   cargo run --release --example test_stt_bench -- <wav_path> <expected_text> [iterations]
 //!
 //! Example:
-//!   cargo run --release --bin test_stt_bench -- ./sample.wav "hi my name is daniel" 5
+//!   cargo run --release --example test_stt_bench -- aegis/fixtures/sample.wav "hi my name is daniel" 5
 //!
 //! Recording a sample (24kHz mono, 16-bit signed little-endian):
-//!   arecord -f S16_LE -c 1 -r 24000 -d 4 sample.wav
+//!   pw-record --rate 24000 --channels 1 --format s16 aegis/fixtures/sample.wav
 
 #[path = "../src/screenshot/mod.rs"]
 mod screenshot;

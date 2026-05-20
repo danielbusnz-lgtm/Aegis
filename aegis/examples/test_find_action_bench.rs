@@ -5,12 +5,12 @@
 // where the latency budget goes.
 //
 // Usage:
-//   cargo run --release --bin test_find_action_bench -- ./sample.wav 5
+//   cargo run --release --example test_find_action_bench -- aegis/fixtures/find_action_sample.wav 5
 //
 // Record a sample if you don't have one yet (24kHz mono PCM 16-bit):
-//   arecord -f S16_LE -c 1 -r 24000 -d 4 sample.wav
-//   # or with pipewire:
-//   pw-record --rate 24000 --channels 1 --format s16 sample.wav
+//   pw-record --rate 24000 --channels 1 --format s16 aegis/fixtures/find_action_sample.wav
+//   # or with alsa:
+//   arecord -f S16_LE -c 1 -r 24000 -d 4 aegis/fixtures/find_action_sample.wav
 //
 // Reported stages per iteration:
 //   stt:         release → final transcript (Deepgram tail)
