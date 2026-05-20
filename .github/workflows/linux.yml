@@ -16,20 +16,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-4-dev \
-            libgtk4-layer-shell-dev \
-            libjack-jackd2-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libasound2-dev \
             pkg-config
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Type-check all targets
-        run: cargo check --all-targets --features hyprland
+      - name: Type-check (crossplatform feature)
+        run: cargo check --no-default-features --features winit-window,crossplatform
 
-      - name: Build aegis (main bin)
-        run: cargo build --features hyprland --bin aegis
+      - name: Build aegis bin (crossplatform feature)
+        run: cargo build --no-default-features --features winit-window,crossplatform --bin aegis
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
