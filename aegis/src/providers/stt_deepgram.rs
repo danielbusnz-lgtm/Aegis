@@ -119,7 +119,9 @@ impl SttDeepgram {
         // Resolve the auth header. In proxy mode this hits aegis-proxy for a
         // short-lived JWT first (~50ms HTTPS round-trip). In direct mode it's
         // an in-memory string lookup.
+        let t_auth = std::time::Instant::now();
         let auth = self.auth_header().await?;
+        eprintln!("[deepgram-debug] auth_header → {:?}", t_auth.elapsed());
 
         // Build the WS request via tungstenite's IntoClientRequest, then
         // attach the Authorization header. tokio-tungstenite auto-fills the
@@ -129,7 +131,9 @@ impl SttDeepgram {
             .headers_mut()
             .insert("Authorization", auth.parse()?);
 
+        let t_connect = std::time::Instant::now();
         let (ws_stream, _) = tokio_tungstenite::connect_async(request).await?;
+        eprintln!("[deepgram-debug] ws connect → {:?}", t_connect.elapsed());
         let (mut write, mut read) = ws_stream.split();
 
         // Oneshot signal: fires the moment audio_rx closes (user released
@@ -276,7 +280,7 @@ const POST_RELEASE_TIMEOUT_MS: u64 = 1200;
 /// After a non-empty is_final arrives, wait this long for additional
 /// is_final segments before considering Deepgram quiet. Deepgram splits
 /// longer utterances across segments; this catches the tail.
-const QUIESCENCE_MS: u64 = 350;
+const QUIESCENCE_MS: u64 = 200;
 
 /// What happened when we processed a frame.
 enum FrameOutcome {

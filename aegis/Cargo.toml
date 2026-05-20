@@ -80,6 +80,10 @@ name = "test_stt"
 required-features = ["hyprland"]
 
 [[bin]]
+name = "test_stt_bench"
+required-features = ["hyprland"]
+
+[[bin]]
 name = "test_vision"
 required-features = ["hyprland"]
 

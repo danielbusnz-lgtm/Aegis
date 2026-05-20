@@ -1,3 +1,4 @@
 /target
 .env
 launcher/src-tauri/gen/
+*.wav
