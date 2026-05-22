@@ -1,6 +1,12 @@
-# Aegis
+<p align="center">
+  <img alt="aegis cursor" src="launcher/src/welcome/cursor.svg" width="128">
+</p>
 
-Voice-controlled AI cursor for Linux. Hold a hotkey, say something, the cursor flies to whatever you mentioned or the right action fires.
+<h1 align="center">Aegis</h1>
+
+<p align="center">
+  Voice-controlled AI cursor for Linux. Hold a hotkey, say something, the cursor flies to whatever you mentioned or the right action fires.
+</p>
 
 ```
 "where is the search bar"      → cursor flies to it
