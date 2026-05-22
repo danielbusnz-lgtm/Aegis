@@ -1,0 +1,38 @@
+# Runs cargo-deny against the workspace. Four checks fire:
+#   advisories: known CVEs in the dep graph.
+#   licenses:   only the allowlist in deny.toml.
+#   bans:       no wildcards, flag duplicate versions.
+#   sources:    only crates.io and explicit git deps.
+#
+# Triggers on dep-graph changes and on a Monday cron so we catch
+# advisories that get published between commits.
+
+name: deny
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - '**/Cargo.toml'
+      - 'deny.toml'
+      - '.github/workflows/deny.yml'
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - '**/Cargo.toml'
+      - 'deny.toml'
+      - '.github/workflows/deny.yml'
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 06:00 UTC
+
+jobs:
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses bans sources
