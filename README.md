@@ -2,14 +2,14 @@
   <img alt="aegis cursor" src="launcher/src/welcome/cursor.svg" width="128">
 </p>
 
+<h1 align="center">Aegis</h1>
+
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-orange?logo=rust&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue">
   <img alt="Platform" src="https://img.shields.io/badge/Linux%20%7C%20Hyprland-black?logo=linux&logoColor=white">
   <img alt="Status" src="https://img.shields.io/badge/Status-WIP-yellow">
 </p>
-
-<h1 align="center">Aegis</h1>
 
 <p align="center">
   Voice-controlled AI cursor for Linux. Hold a hotkey, say something, the cursor flies to whatever you mentioned or the right action fires.
@@ -116,4 +116,4 @@ Inspired by [farzaa/clicky](https://github.com/farzaa/clicky) and [earendil-work
 
 ## License
 
-MIT
+[MIT](LICENSE)
