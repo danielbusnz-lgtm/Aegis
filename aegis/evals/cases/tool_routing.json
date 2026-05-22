@@ -1,0 +1,145 @@
+{
+  "_doc": "Tool-routing eval cases. Each case feeds a transcript to the classifier and compares the actual Intent to expected_intent. The model never sees expected_intent. Add or edit cases freely; just keep ids unique. Run with: cargo run --release --example eval_tool_routing",
+  "cases": [
+    {
+      "id": "memory_store_001",
+      "transcript": "remember my favorite color is blue",
+      "expected_intent": "Memory",
+      "category": "memory_store",
+      "notes": "explicit remember + key + value"
+    },
+    {
+      "id": "memory_store_002",
+      "transcript": "I live in Boston",
+      "expected_intent": "Memory",
+      "category": "memory_store",
+      "notes": "passive statement of fact, should still store"
+    },
+    {
+      "id": "memory_store_003",
+      "transcript": "my dog's name is Rufus",
+      "expected_intent": "Memory",
+      "category": "memory_store",
+      "notes": "possessive about an entity"
+    },
+    {
+      "id": "memory_store_004",
+      "transcript": "I'm allergic to peanuts",
+      "expected_intent": "Memory",
+      "category": "memory_store",
+      "notes": "health fact"
+    },
+    {
+      "id": "memory_recall_001",
+      "transcript": "what's my favorite color",
+      "expected_intent": "Memory",
+      "category": "memory_recall",
+      "notes": "direct recall question"
+    },
+    {
+      "id": "memory_recall_002",
+      "transcript": "where do I live",
+      "expected_intent": "Memory",
+      "category": "memory_recall",
+      "notes": "indirect recall, key inferred"
+    },
+    {
+      "id": "memory_recall_003",
+      "transcript": "do you remember my name",
+      "expected_intent": "Memory",
+      "category": "memory_recall",
+      "notes": "polite phrasing"
+    },
+    {
+      "id": "memory_recall_004",
+      "transcript": "what did I tell you about my allergy",
+      "expected_intent": "Memory",
+      "category": "memory_recall",
+      "notes": "what did I tell you phrasing"
+    },
+    {
+      "id": "chat_001",
+      "transcript": "what's the difference between rust and go",
+      "expected_intent": "Chat",
+      "category": "chat",
+      "notes": "general knowledge question"
+    },
+    {
+      "id": "chat_002",
+      "transcript": "tell me a joke",
+      "expected_intent": "Chat",
+      "category": "chat",
+      "notes": "open-ended creative request"
+    },
+    {
+      "id": "chat_003",
+      "transcript": "explain how mutexes work",
+      "expected_intent": "Chat",
+      "category": "chat",
+      "notes": "explain question, no screen content"
+    },
+    {
+      "id": "chat_004",
+      "transcript": "what do you think about ai progress",
+      "expected_intent": "Chat",
+      "category": "chat",
+      "notes": "opinion solicitation"
+    },
+    {
+      "id": "findaction_001",
+      "transcript": "click the search bar",
+      "expected_intent": "FindAction",
+      "category": "findaction",
+      "notes": "direct cursor interaction"
+    },
+    {
+      "id": "findaction_002",
+      "transcript": "where is the settings menu",
+      "expected_intent": "FindAction",
+      "category": "findaction",
+      "notes": "where-on-screen question"
+    },
+    {
+      "id": "findaction_003",
+      "transcript": "scroll down",
+      "expected_intent": "FindAction",
+      "category": "findaction",
+      "notes": "scroll primitive"
+    },
+    {
+      "id": "integration_001",
+      "transcript": "play some jazz",
+      "expected_intent": "Integration",
+      "category": "integration",
+      "notes": "spotify play"
+    },
+    {
+      "id": "integration_002",
+      "transcript": "pause",
+      "expected_intent": "Integration",
+      "category": "integration",
+      "notes": "one-word pause command"
+    },
+    {
+      "id": "integration_003",
+      "transcript": "skip this song",
+      "expected_intent": "Integration",
+      "category": "integration",
+      "notes": "spotify skip with anaphoric this"
+    },
+    {
+      "id": "adversarial_001",
+      "transcript": "remember when we talked about dune",
+      "expected_intent": "Chat",
+      "category": "adversarial",
+      "notes": "looks like memory because of remember, but is conversational reminiscing"
+    },
+    {
+      "id": "adversarial_002",
+      "transcript": "open spotify and play bohemian rhapsody then check my email",
+      "expected_intent": "Agent",
+      "category": "adversarial",
+      "notes": "chained multi-step, should be Agent not Integration"
+    }
+  ]
+}

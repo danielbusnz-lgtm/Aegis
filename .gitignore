@@ -2,3 +2,4 @@
 .env
 launcher/src-tauri/gen/
 *.wav
+aegis/evals/results/

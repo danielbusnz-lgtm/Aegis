@@ -68,6 +68,14 @@ name = "aegis"
 # (cursor::, hotkey::, mouse::, screenshot::) so any feature combo that
 # provides those, hyprland or winit-window+crossplatform, works.
 
+# LLM behavior evals live in evals/runners/, not examples/, so the boundary
+# between "stochastic API-calling eval" and "hand-run demo" is obvious from
+# the path. Cases (data) live in evals/cases/, results in evals/results/
+# (gitignored). Run with `cargo run --bin <name>`.
+[[bin]]
+name = "eval_tool_routing"
+path = "evals/runners/tool_routing.rs"
+
 # Diagnostic and benchmark programs live in demos/, not src/bin/, because
 # they aren't part of the production app. Each one exercises a specific
 # slice of the pipeline (STT, classifier+find_action, cursor overlay,
