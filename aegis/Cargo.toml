@@ -58,13 +58,17 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http2", "tokio"] }
 hyper-rustls = { version = "0.27", features = ["native-tokio", "http2", "ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
-# macOS-only: force NSWindow + contentView + softbuffer sublayers to
-# non-opaque so the cursor overlay's transparent pixels actually composite
-# against the desktop. Without this, softbuffer's CALayer renders opaque
-# and the whole screen goes black.
+# macOS-only renderer: softbuffer's macOS backend strips alpha at the
+# CGImage level (CGImageAlphaInfo::NoneSkipFirst), so we use wgpu instead
+# for the cursor overlay's pixel presentation. wgpu's CompositeAlphaMode::
+# PostMultiplied honors per-pixel alpha against the desktop. objc2 +
+# raw-window-handle remain for any residual NSWindow plumbing.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 raw-window-handle = "0.6"
+wgpu = "22"
+bytemuck = "1"
+pollster = "0.4"
 
 # Binaries are split by which feature set they need. Without these markers,
 # `cargo build` tries to compile every binary against every feature combo,

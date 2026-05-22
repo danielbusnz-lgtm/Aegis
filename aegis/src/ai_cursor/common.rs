@@ -1,7 +1,7 @@
 //! Shared constants, types, and utilities for cursor overlay implementations.
 
-use std::sync::mpsc::Receiver;
 use std::sync::OnceLock;
+use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 

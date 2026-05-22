@@ -3,7 +3,6 @@
 //! Provides a unified interface for platform-specific window setup,
 //! delegating to macos.rs on macOS and providing defaults elsewhere.
 
-use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
@@ -38,24 +37,6 @@ pub fn post_window_create(event_loop: &ActiveEventLoop, window: &Window) {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (event_loop, window); // suppress unused warnings
-    }
-}
-
-/// Called after softbuffer Surface creation to configure transparency.
-/// On macOS: forces NSWindow and CALayer hierarchy non-opaque.
-/// On other platforms: no-op.
-///
-/// # Safety
-/// On macOS, uses raw Objective-C messaging. Only call after surface creation.
-pub unsafe fn configure_transparency(window: &Arc<Window>) {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        macos::configure_transparency(window);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = window; // suppress unused warning
     }
 }
 

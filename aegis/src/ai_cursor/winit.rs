@@ -1,33 +1,33 @@
 //! winit-based cursor overlay. Covers Windows, macOS, and X11.
 //!
 //! Drawing pipeline mirrors the Cairo path in hyprland.rs:
-//!   drawable (sprite/soundwave/spinner) → tiny-skia Pixmap → dirty-region
-//!   copy to softbuffer's surface as 0RGB u32 pixels.
+//!   drawable (sprite/soundwave/spinner) → tiny-skia Pixmap → Renderer.
+//! The renderer is softbuffer on Linux/Windows and wgpu on macOS; see
+//! `renderer.rs` for why.
 
-use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
-use softbuffer::{Context, Surface};
 use tiny_skia::Pixmap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
+use super::CursorState;
 use super::common::{
-    self, tick, DirtyRect, CURSOR_DISPLAY_SIZE, CURSOR_PNG, CURSOR_SENDER, STATE_SENDER,
+    self, CURSOR_DISPLAY_SIZE, CURSOR_PNG, CURSOR_SENDER, DirtyRect, STATE_SENDER, tick,
 };
 use super::platform;
-use super::CursorState;
+use super::renderer::Renderer;
 use crate::painter::{DrawSkia, LoadingSpinner, Soundwave, SpriteSkia};
 
 struct CursorApp {
     attrs: WindowAttributes,
     window: Option<Arc<Window>>,
-    surface: Option<Surface<Arc<Window>, Arc<Window>>>,
-    /// Fullscreen canvas we draw into each frame, then copy to softbuffer.
+    surface: Option<Renderer>,
+    /// Canvas we draw into each frame, then hand to the renderer.
     canvas: Option<Pixmap>,
     /// What we're drawing right now. Swapped on CursorState transitions.
     drawable: Box<dyn DrawSkia>,
@@ -64,15 +64,10 @@ impl ApplicationHandler for CursorApp {
         // Platform-specific window sizing (macOS: fill screen without fullscreen mode)
         platform::post_window_create(event_loop, &window);
 
-        let context = Context::new(window.clone()).expect("softbuffer Context");
-        let surface = Surface::new(&context, window.clone()).expect("softbuffer Surface");
+        // Construct the platform's renderer (softbuffer on Linux/Windows, wgpu on macOS).
+        let renderer = Renderer::new(window.clone()).expect("renderer init");
 
-        // Platform-specific transparency configuration (macOS: force layers non-opaque)
-        unsafe {
-            platform::configure_transparency(&window);
-        }
-
-        self.surface = Some(surface);
+        self.surface = Some(renderer);
         self.window = Some(window);
     }
 
@@ -96,16 +91,18 @@ impl ApplicationHandler for CursorApp {
 
 impl CursorApp {
     fn render(&mut self) {
-        let (Some(window), Some(surface)) = (&self.window, self.surface.as_mut()) else {
+        let (Some(window), Some(renderer)) = (&self.window, self.surface.as_mut()) else {
             return;
         };
         let size = window.inner_size();
-        let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else {
+        if size.width == 0 || size.height == 0 {
             return;
-        };
+        }
 
-        // Resize softbuffer + reallocate the tiny-skia canvas if window grew.
-        surface.resize(w, h).expect("surface resize");
+        // Resize renderer + reallocate the tiny-skia canvas if window grew.
+        renderer
+            .resize(size.width, size.height)
+            .expect("renderer resize");
         let needs_alloc = self
             .canvas
             .as_ref()
@@ -188,9 +185,11 @@ impl CursorApp {
             }
         };
 
-        if let Some(rect) = dirty {
+        let present_dirty = if let Some(rect) = dirty {
             let rect = rect.clamp(canvas_w, canvas_h);
-            if !rect.is_empty() {
+            if rect.is_empty() {
+                None
+            } else {
                 // Clear the dirty region on the canvas. Zero bytes equals
                 // premultiplied transparent under tiny-skia's RGBA layout.
                 let stride_bytes = canvas_w as usize * 4;
@@ -207,30 +206,15 @@ impl CursorApp {
                 if let Some((x, y)) = next {
                     self.drawable.draw_skia(canvas, x, y);
                 }
-
-                // Convert ONLY the dirty region from canvas RGBA bytes into
-                // softbuffer's 0xAARRGGBB u32 pixels. Windows 11 DWM honors
-                // the high byte as alpha, giving per-pixel transparency.
-                let mut buffer = surface.buffer_mut().expect("buffer_mut");
-                let src = canvas.data();
-                let pix_stride = canvas_w as usize;
-                for y in rect.y0..rect.y1 {
-                    let src_row = (y as usize) * pix_stride * 4;
-                    let dst_row = (y as usize) * pix_stride;
-                    for x in rect.x0..rect.x1 {
-                        let i = x as usize;
-                        let c = &src[src_row + i * 4..src_row + i * 4 + 4];
-                        buffer[dst_row + i] = u32::from_be_bytes([c[3], c[0], c[1], c[2]]);
-                    }
-                }
-                buffer.present().expect("buffer present");
+                Some(rect)
             }
         } else {
-            // No sprite this frame and none last frame. Present an unchanged
-            // buffer so softbuffer's frame model stays happy.
-            let buffer = surface.buffer_mut().expect("buffer_mut");
-            buffer.present().expect("buffer present");
-        }
+            None
+        };
+
+        renderer
+            .present(canvas, present_dirty)
+            .expect("renderer present");
 
         self.last_sprite_rect = new_rect;
 
@@ -298,5 +282,8 @@ pub fn cursor(initial_x: i32, initial_y: i32) -> ! {
     std::process::exit(0);
 }
 
-// Re-export public API from common
+// Re-export public API from common. `set_state` is only used on hyprland
+// builds (via orchestrator), but we re-export it here too so external code
+// can stay backend-agnostic.
+#[allow(unused_imports)]
 pub use common::{point_at, set_state};

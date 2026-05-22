@@ -31,6 +31,10 @@ mod macos;
 #[cfg(feature = "winit-window")]
 mod platform;
 
+// Cross-platform renderer abstraction (softbuffer on non-macOS, wgpu on macOS)
+#[cfg(feature = "winit-window")]
+mod renderer;
+
 #[cfg(feature = "hyprland")]
 mod hyprland;
 #[cfg(feature = "hyprland")]
