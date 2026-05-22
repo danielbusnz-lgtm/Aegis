@@ -19,6 +19,18 @@ pub enum CursorState {
     Loading,
 }
 
+// Shared types and utilities used by both winit and hyprland implementations
+#[cfg(feature = "winit-window")]
+mod common;
+
+// macOS-specific window configuration (only compiled on macOS)
+#[cfg(all(feature = "winit-window", target_os = "macos"))]
+mod macos;
+
+// Platform abstraction layer for window configuration
+#[cfg(feature = "winit-window")]
+mod platform;
+
 #[cfg(feature = "hyprland")]
 mod hyprland;
 #[cfg(feature = "hyprland")]

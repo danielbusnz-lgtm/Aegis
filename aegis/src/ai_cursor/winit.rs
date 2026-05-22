@@ -6,87 +6,22 @@
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::OnceLock;
-use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{channel, Receiver};
+use std::time::Instant;
 
 use softbuffer::{Context, Surface};
 use tiny_skia::Pixmap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-#[cfg(not(target_os = "macos"))]
-use winit::window::Fullscreen;
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
+use super::common::{
+    self, tick, DirtyRect, CURSOR_DISPLAY_SIZE, CURSOR_PNG, CURSOR_SENDER, STATE_SENDER,
+};
+use super::platform;
 use super::CursorState;
 use crate::painter::{DrawSkia, LoadingSpinner, Soundwave, SpriteSkia};
-
-// ── Portable constants (mirrors hyprland.rs) ────────────────────────────────
-// Time for cursor lag to halve. 91.7ms reproduces the previous 500Hz × 0.015
-// feel under a delta-time formulation, so the cursor is equally snappy at
-// 60Hz, 144Hz, or 500Hz tick rates.
-const SMOOTHING_HALF_LIFE: f64 = 0.0917;
-const Y_OFFSET: i32 = -70;
-const X_OFFSET: i32 = 20;
-const POINT_DURATION: Duration = Duration::from_secs(3);
-const CURSOR_DISPLAY_SIZE: f64 = 18.0;
-
-const CURSOR_PNG: &[u8] = include_bytes!("../../assets/cursor.png");
-
-// ── Portable thread-safe channels ───────────────────────────────────────────
-static CURSOR_SENDER: OnceLock<Sender<(i32, i32)>> = OnceLock::new();
-static STATE_SENDER: OnceLock<Sender<CursorState>> = OnceLock::new();
-
-/// Push a state change to the cursor overlay. Callable from any thread.
-/// No-op if `cursor()` hasn't been initialized yet.
-pub fn set_state(state: CursorState) {
-    if let Some(sender) = STATE_SENDER.get() {
-        let _ = sender.send(state);
-    }
-}
-
-/// Ask the cursor to fly to (x, y) and sit there for ~3 seconds, then resume
-/// following the mouse. Callable from any thread. No-op if `cursor()` hasn't
-/// been initialized yet.
-pub fn point_at(x: i32, y: i32) {
-    if let Some(sender) = CURSOR_SENDER.get() {
-        let _ = sender.send((x, y));
-    }
-}
-
-/// Half-open pixel rectangle: [x0, x1) × [y0, y1). Signed because the cursor
-/// can sit slightly off-screen during smoothing, and we clamp into the canvas
-/// before any indexing happens.
-#[derive(Copy, Clone, Debug)]
-struct DirtyRect {
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-}
-
-impl DirtyRect {
-    fn union(self, other: Self) -> Self {
-        Self {
-            x0: self.x0.min(other.x0),
-            y0: self.y0.min(other.y0),
-            x1: self.x1.max(other.x1),
-            y1: self.y1.max(other.y1),
-        }
-    }
-    fn clamp(self, w: u32, h: u32) -> Self {
-        Self {
-            x0: self.x0.clamp(0, w as i32),
-            y0: self.y0.clamp(0, h as i32),
-            x1: self.x1.clamp(0, w as i32),
-            y1: self.y1.clamp(0, h as i32),
-        }
-    }
-    fn is_empty(self) -> bool {
-        self.x1 <= self.x0 || self.y1 <= self.y0
-    }
-}
 
 struct CursorApp {
     attrs: WindowAttributes,
@@ -126,63 +61,15 @@ impl ApplicationHandler for CursorApp {
             .set_cursor_hittest(false)
             .expect("set_cursor_hittest failed");
 
-        // On macOS, Fullscreen::Borderless puts the window in its own
-        // Space and forces it opaque, killing the transparency we set
-        // via with_transparent(true). Instead, size the window to fill
-        // the primary monitor without entering fullscreen mode.
-        #[cfg(target_os = "macos")]
-        if let Some(monitor) = event_loop.primary_monitor() {
-            let size = monitor.size();
-            let pos = monitor.position();
-            let _ = window.request_inner_size(size);
-            window.set_outer_position(pos);
-        }
+        // Platform-specific window sizing (macOS: fill screen without fullscreen mode)
+        platform::post_window_create(event_loop, &window);
 
         let context = Context::new(window.clone()).expect("softbuffer Context");
         let surface = Surface::new(&context, window.clone()).expect("softbuffer Surface");
 
-        // On macOS, force every layer in the window's hierarchy non-opaque.
-        // softbuffer adds its own CALayer during Surface::new which defaults
-        // to opaque; without this the entire screen renders black even
-        // though the window is set to transparent. See winit.rs comment in
-        // resumed() for the broader context.
-        #[cfg(target_os = "macos")]
+        // Platform-specific transparency configuration (macOS: force layers non-opaque)
         unsafe {
-            use objc2::msg_send;
-            use objc2::runtime::{AnyObject, Bool};
-            use winit::platform::macos::WindowExtMacOS;
-
-            let ns_window = window.ns_window() as *mut AnyObject;
-            if !ns_window.is_null() {
-                // NSWindow: setOpaque:NO and backgroundColor = [NSColor clearColor]
-                let _: () = msg_send![ns_window, setOpaque: Bool::NO];
-                let ns_color_class = objc2::class!(NSColor);
-                let clear_color: *mut AnyObject = msg_send![ns_color_class, clearColor];
-                let _: () = msg_send![ns_window, setBackgroundColor: clear_color];
-
-                // contentView: ensure layer-backed and the root layer is non-opaque
-                let content_view: *mut AnyObject = msg_send![ns_window, contentView];
-                if !content_view.is_null() {
-                    let _: () = msg_send![content_view, setWantsLayer: Bool::YES];
-                    let layer: *mut AnyObject = msg_send![content_view, layer];
-                    if !layer.is_null() {
-                        let _: () = msg_send![layer, setOpaque: Bool::NO];
-
-                        // Walk softbuffer's sublayers (added by Surface::new
-                        // above) and force each non-opaque too.
-                        let sublayers: *mut AnyObject = msg_send![layer, sublayers];
-                        if !sublayers.is_null() {
-                            let count: usize = msg_send![sublayers, count];
-                            for i in 0..count {
-                                let sub: *mut AnyObject = msg_send![sublayers, objectAtIndex: i];
-                                if !sub.is_null() {
-                                    let _: () = msg_send![sub, setOpaque: Bool::NO];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            platform::configure_transparency(&window);
         }
 
         self.surface = Some(surface);
@@ -240,10 +127,10 @@ impl CursorApp {
         // use, so the swap logic below handles all sources uniformly.
         let recording = crate::hotkey::is_recording();
         if recording && !self.was_recording {
-            set_state(CursorState::Listening);
+            common::set_state(CursorState::Listening);
         }
         if !recording && self.was_recording {
-            set_state(CursorState::Loading);
+            common::set_state(CursorState::Loading);
         }
         self.was_recording = recording;
 
@@ -258,11 +145,7 @@ impl CursorApp {
             };
         }
 
-        // Run one tick to advance position. The mouse_position crate
-        // returns logical points on macOS but physical pixels on X11, so
-        // we scale only on macOS. The canvas is sized in physical pixels
-        // (window.inner_size() returns physical), so without this the
-        // sprite renders in the upper-left quadrant on Retina displays.
+        // Run one tick to advance position.
         let next = tick(
             &self.receiver,
             &mut self.cursor_x,
@@ -270,11 +153,9 @@ impl CursorApp {
             &mut self.override_target,
             &mut self.last_tick,
         );
-        #[cfg(target_os = "macos")]
-        let next = next.map(|(x, y)| {
-            let sf = window.scale_factor();
-            (x * sf, y * sf)
-        });
+
+        // Platform-specific coordinate scaling (macOS: logical to physical for Retina)
+        let next = next.map(|pos| platform::scale_cursor_position(window, pos));
 
         // Compute the drawable's bounding box for this frame. (x, y) is the
         // visual center (matching hyprland's Drawable convention), so the box
@@ -384,14 +265,13 @@ pub fn cursor(initial_x: i32, initial_y: i32) -> ! {
     let initial_drawable: Box<dyn DrawSkia> =
         Box::new(SpriteSkia::from_png(CURSOR_PNG, CURSOR_DISPLAY_SIZE));
 
-    // Common attributes. On macOS we deliberately skip Fullscreen::Borderless
-    // and size the window manually in resumed(): see the comment there.
+    // Common attributes with platform-specific fullscreen handling.
+    // macOS skips fullscreen (kills transparency) and sizes manually in resumed().
     let attrs = Window::default_attributes()
         .with_transparent(true)
         .with_decorations(false)
         .with_window_level(WindowLevel::AlwaysOnTop);
-    #[cfg(not(target_os = "macos"))]
-    let attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
+    let attrs = platform::apply_window_attrs(attrs);
 
     let event_loop = EventLoop::new().expect("EventLoop::new failed");
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -418,51 +298,5 @@ pub fn cursor(initial_x: i32, initial_y: i32) -> ! {
     std::process::exit(0);
 }
 
-/// Drains pending point_at commands, picks a target (override or mouse),
-/// runs the smoothing step, and returns the next (x, y) to render as the
-/// drawable's visual center.
-fn tick(
-    receiver: &Receiver<(i32, i32)>,
-    cursor_x: &mut f64,
-    cursor_y: &mut f64,
-    override_target: &mut Option<(i32, i32, Instant)>,
-    last_tick: &mut Option<Instant>,
-) -> Option<(f64, f64)> {
-    let now = Instant::now();
-    let delta_t = match *last_tick {
-        Some(prev) => now.duration_since(prev).as_secs_f64(),
-        None => 0.0,
-    };
-    *last_tick = Some(now);
-
-    while let Ok((target_x, target_y)) = receiver.try_recv() {
-        *override_target = Some((target_x, target_y, Instant::now() + POINT_DURATION));
-    }
-
-    let (target, apply_offsets) = match *override_target {
-        Some((target_x, target_y, until)) if Instant::now() < until => {
-            (Some((target_x as f64, target_y as f64)), false)
-        }
-        _ => {
-            *override_target = None;
-            let mouse = crate::mouse_position::mouse_movement()
-                .ok()
-                .map(|(mx, my)| (mx as f64, my as f64));
-            (mouse, true)
-        }
-    };
-
-    if let Some((target_x, target_y)) = target {
-        let alpha = 1.0 - 2f64.powf(-delta_t / SMOOTHING_HALF_LIFE);
-        *cursor_x += (target_x - *cursor_x) * alpha;
-        *cursor_y += (target_y - *cursor_y) * alpha;
-        let (ox, oy) = if apply_offsets {
-            (X_OFFSET as f64, Y_OFFSET as f64)
-        } else {
-            (0.0, 0.0)
-        };
-        Some((*cursor_x + ox, *cursor_y + oy))
-    } else {
-        None
-    }
-}
+// Re-export public API from common
+pub use common::{point_at, set_state};

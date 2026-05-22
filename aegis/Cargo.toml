@@ -64,6 +64,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # and the whole screen goes black.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+raw-window-handle = "0.6"
 
 # Binaries are split by which feature set they need. Without these markers,
 # `cargo build` tries to compile every binary against every feature combo,
