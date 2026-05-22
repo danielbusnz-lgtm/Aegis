@@ -87,3 +87,9 @@ through to a small Claude classifier call (around 700ms).
 The `memory` path writes facts as JSONL lines and looks them up by
 keyword. The deeper design (vector index, embeddings cache, future
 SQLite migration) lives in [memory-architecture.md](./memory-architecture.md).
+
+## Next: lasso to ask
+
+Hold the hotkey, drag the cursor to circle a region of the screen, ask a question.
+The outline ships to the model alongside the transcript as literal context.
+Pointing replaces describing, which solves referential ambiguity in voice agents.
