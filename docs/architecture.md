@@ -1,7 +1,6 @@
 # Architecture
 
-One voice turn end to end. The hot path is roughly 1.2s from hotkey
-release to action firing.
+One voice turn end to end. Hot path: ~1.2s from hotkey release to action.
 
 ## Pipeline
 
@@ -34,59 +33,47 @@ flowchart LR
     TTS --> SPK[Speaker<br/>audio out]
 ```
 
-Solid arrows are the data path. Dotted arrows are state that flows
-sideways (the pre-captured screenshot, the optional spoken confirmation
-of a cursor action).
+Solid: data path. Dotted: pre-captured screenshot and optional TTS confirmation.
 
-## The five intent paths
+## Five intent paths
 
 | Path | When it fires | Output |
 | --- | --- | --- |
-| `memory` | "remember my X is Y", "what's my Z" | Local store write/read |
+| `memory` | "remember my X is Y", "what's my Z" | Local store read/write |
 | `find_action` | "where is X", "click X", "type X" | Cursor or input event |
 | `integration` | "play X", "check my email", "show my PRs" | Service call + spoken summary |
 | `chat` | "what's your name", "how does X work" | Spoken reply |
 | `agent` | Multi-step chains | Iterative tool use |
 
-The keyword classifier in `aegis/src/intent.rs` covers around 80% of
-turns in roughly a millisecond. The remaining ambiguous turns fall
-through to a small Claude classifier call (around 700ms).
+Keyword classifier (`intent.rs`) handles ~80% of turns in <1ms. Ambiguous turns fall through to a Claude call (~700ms).
 
 ## Why this shape
 
-- **Screenshot in parallel with STT.** Roughly 60% of turns never need
-  it (chat, integration, memory). Capturing eagerly trades the small
-  cost of an unused PNG for a much faster `find_action` path when one
-  does come through.
-- **Keyword classifier before LLM classifier.** Most utterances are
-  unambiguous. We don't pay 700ms of LLM latency to find that out.
-- **Per-turn TTS channel.** Sentences stream into Cartesia as soon as
-  the model produces them. First-flush minimums live in `tuning.rs`.
-- **Barge-in cancellation.** Pressing the hotkey during TTS playback
-  cancels the in-flight turn and starts a new one. See `barge_in.rs`.
+- **Screenshot in parallel with STT.** ~60% of turns never need it; eager capture is cheaper than blocking `find_action` on it.
+- **Keyword classifier first.** Skips the 700ms LLM round-trip when intent is obvious.
+- **Per-turn TTS channel.** Sentences stream to Cartesia as Claude emits them. Knobs in `tuning.rs`.
+- **Barge-in cancellation.** Hotkey re-fire cancels the in-flight turn. See `barge_in.rs`.
 
 ## Where each piece lives
 
 | Module | Responsibility |
 | --- | --- |
-| `audio/` | Mic capture, ring buffer, RMS level for the overlay |
+| `audio/` | Mic capture, ring buffer, RMS for the overlay |
 | `providers/stt_deepgram` | Streaming STT over WS |
-| `providers/claude` | Classifier, find_action, chat, agent calls |
+| `providers/claude` | Classifier, find_action, chat, agent |
 | `providers/tts_cartesia` | Streaming TTS |
 | `intent.rs` | Keyword classifier |
-| `orchestrator.rs` | The per-turn state machine drawn above |
-| `voice_session.rs` | Tokio runtime + shared per-process state |
-| `screenshot/` | Active workspace capture, resize for Claude |
+| `orchestrator.rs` | Per-turn state machine |
+| `voice_session.rs` | Tokio runtime + shared state |
+| `screenshot/` | Workspace capture, resize for Claude |
 | `actions.rs` | Cursor move, click, key input |
-| `barge_in.rs` | Cancel an in-flight turn when the hotkey re-fires |
-| `tuning.rs` | Every behavioral knob, with up/down tradeoff comments |
-| `painter.rs` | Overlay rendering (Hyprland layer-shell or winit) |
+| `barge_in.rs` | Cancel in-flight turn on hotkey re-fire |
+| `tuning.rs` | Behavioral knobs with up/down tradeoff comments |
+| `painter.rs` | Overlay rendering (layer-shell or winit) |
 
 ## Memory layer
 
-The `memory` path writes facts as JSONL lines and looks them up by
-keyword. The deeper design (vector index, embeddings cache, future
-SQLite migration) lives in [memory-architecture.md](./memory-architecture.md).
+JSONL key/value at `~/.config/aegis/memory.jsonl`. Three-tier design (FTS5 log, embeddings, sleep-time consolidation) in [memory-architecture.md](./memory-architecture.md).
 
 ## Next: lasso to ask
 
