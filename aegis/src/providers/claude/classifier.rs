@@ -133,13 +133,12 @@ impl Claude {
                         continue;
                     };
                     match event["type"].as_str() {
-                        Some("content_block_start") => {
+                        Some("content_block_start")
                             if event["content_block"]["type"].as_str() == Some("tool_use")
-                                && event["content_block"]["name"].as_str() == Some("classify")
-                            {
-                                in_tool_use = true;
-                                tool_json_buffer.clear();
-                            }
+                                && event["content_block"]["name"].as_str() == Some("classify") =>
+                        {
+                            in_tool_use = true;
+                            tool_json_buffer.clear();
                         }
                         Some("content_block_delta") => {
                             if in_tool_use

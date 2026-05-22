@@ -265,11 +265,7 @@ impl LiveMic {
             s.current_tx = Some(tx);
         }
         let frames_per_ms = (self.sample_rate as usize) * (self.channels as usize) / 1000;
-        let preroll_ms = if frames_per_ms == 0 {
-            0
-        } else {
-            preroll_samples / frames_per_ms
-        };
+        let preroll_ms = preroll_samples.checked_div(frames_per_ms).unwrap_or(0);
         eprintln!(
             "[audio] forwarding to STT (flushed {} pre-roll chunks, {} samples, ~{}ms)...",
             preroll_chunks, preroll_samples, preroll_ms
