@@ -24,21 +24,6 @@
         "center": true
       },
       {
-        "label": "onboarding",
-        "url": "onboarding/index.html",
-        "title": "Aegis",
-        "width": 600,
-        "height": 350,
-        "resizable": false,
-        "fullscreen": false,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "transparent": true,
-        "visible": false,
-        "focus": false
-      },
-      {
         "label": "auth",
         "url": "auth/signin.html",
         "title": "Aegis Sign In",

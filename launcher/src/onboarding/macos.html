@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" class="h-full bg-[#1a1a1a]">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="h-full" data-tauri-drag-region>
+    <div class="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-8">
+      <p class="text-2xl text-gray-400">
+        Hold
+        <button type="button" id="dismiss-button" class="cursor-pointer select-none align-middle inline-flex items-center gap-2 rounded-lg transition-transform duration-75 hover:scale-105 active:translate-y-[2px] active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff8c00]/60">
+          <kbd class="rounded-md bg-[#2a2a2a] px-3 py-1.5 text-base font-mono text-white shadow-[0_6px_18px_rgba(255,140,0,0.18)] border border-white/10">Ctrl</kbd>
+          <span class="text-base text-gray-500">+</span>
+          <kbd class="rounded-md bg-[#2a2a2a] px-3 py-1.5 text-base font-mono text-white shadow-[0_6px_18px_rgba(255,140,0,0.18)] border border-white/10">Space</kbd>
+        </button>
+        and ask a question to get started.
+      </p>
+    </div>
+    <script src="onboarding.js" defer></script>
+  </body>
+</html>
