@@ -1,0 +1,6 @@
+# Code owners. Combined with branch protection's
+# `require_code_owner_reviews`, only an approval from a listed owner
+# satisfies the merge requirement on `main`. Other collaborators can
+# still review and comment; their approvals just don't count.
+
+* @danielbusnz-lgtm
