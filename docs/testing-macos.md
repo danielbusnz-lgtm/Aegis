@@ -109,10 +109,10 @@ You should see something like:
 
 ```
 [hotkey] registered (global)
-aegis ready. hold Cmd+Shift+Space to talk
+aegis ready. hold Ctrl+Space to talk
 ```
 
-`Cmd+Shift+Space` is the macOS-specific binding (the Linux build uses
+`Ctrl+Space` is the macOS-specific binding (the Linux build uses
 plain `Insert`). If you see `register: …` followed by an error, the
 global hotkey couldn't bind, usually because Accessibility was denied
 or the chord is already taken by something else.
@@ -143,7 +143,7 @@ wgpu surface configuration.
 
 ### Try a voice turn
 
-Hold `Cmd+Shift+Space`, say something simple ("what's my name"),
+Hold `Ctrl+Space`, say something simple ("what's my name"),
 release.
 
 Expected best case: aegis transcribes, classifies as `chat`, calls

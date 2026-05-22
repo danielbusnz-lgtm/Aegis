@@ -33,7 +33,7 @@ fn set_cursor_idle() {}
 pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: TtsCartesia) {
     let session = VoiceSession::start(mic, stt, claude, cartesia);
 
-    println!("aegis ready. hold SUPER+space to talk");
+    println!("aegis ready. hold Ctrl+Space to talk");
     loop {
         hotkey::wait_for_press();
         let press_t = std::time::Instant::now();

@@ -8,7 +8,6 @@
 //!
 //! Platforms: Windows, macOS, Linux X11. Hyprland/Wayland uses unix_signals.rs.
 
-#[cfg(target_os = "macos")]
 use global_hotkey::hotkey::Modifiers;
 use global_hotkey::hotkey::{Code, HotKey};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
@@ -16,12 +15,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
 
-/// macOS keyboards usually lack a physical Insert key, so we use a chord
-/// the OS doesn't already bind. Everywhere else, plain Insert matches the
-/// Hyprland config.
+/// Ctrl+Space for macOS (easy to hit one-handed).
+/// Plain Insert on other platforms matches the Hyprland config.
 #[cfg(target_os = "macos")]
 fn build_hotkey() -> HotKey {
-    HotKey::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Space)
+    HotKey::new(Some(Modifiers::CONTROL), Code::Space)
 }
 #[cfg(not(target_os = "macos"))]
 fn build_hotkey() -> HotKey {

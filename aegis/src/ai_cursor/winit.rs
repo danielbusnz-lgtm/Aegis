@@ -64,11 +64,17 @@ impl ApplicationHandler for CursorApp {
         // Platform-specific window sizing (macOS: fill screen without fullscreen mode)
         platform::post_window_create(event_loop, &window);
 
+        // Configure transparency (macOS: NSWindow non-opaque with clear background)
+        platform::configure_transparency(&window);
+
         // Construct the platform's renderer (softbuffer on Linux/Windows, wgpu on macOS).
         let renderer = Renderer::new(window.clone()).expect("renderer init");
 
         self.surface = Some(renderer);
-        self.window = Some(window);
+        self.window = Some(window.clone());
+
+        // Request first redraw
+        window.request_redraw();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {

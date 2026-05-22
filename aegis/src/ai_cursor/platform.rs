@@ -3,6 +3,7 @@
 //! Provides a unified interface for platform-specific window setup,
 //! delegating to macos.rs on macOS and providing defaults elsewhere.
 
+use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
@@ -52,5 +53,21 @@ pub fn scale_cursor_position(window: &Window, pos: (f64, f64)) -> (f64, f64) {
     {
         let _ = window; // suppress unused warning
         pos
+    }
+}
+
+/// Configure platform-specific transparency settings.
+/// On macOS: sets NSWindow to non-opaque with clear background.
+/// On other platforms: no-op.
+pub fn configure_transparency(window: &Arc<Window>) {
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: configure_window_transparency uses raw Objective-C messaging
+        // to configure NSWindow properties for transparency.
+        unsafe { macos::configure_window_transparency(window) };
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window; // suppress unused warning
     }
 }

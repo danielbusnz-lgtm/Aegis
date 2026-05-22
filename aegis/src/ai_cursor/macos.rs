@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tiny_skia::Pixmap;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
@@ -32,6 +33,41 @@ pub fn configure_window_size(event_loop: &ActiveEventLoop, window: &Window) {
 pub fn scale_cursor_position(window: &Window, pos: (f64, f64)) -> (f64, f64) {
     let sf = window.scale_factor();
     (pos.0 * sf, pos.1 * sf)
+}
+
+/// Configure the NSWindow for transparency.
+/// Even with wgpu's PostMultiplied alpha mode, the NSWindow itself needs to
+/// be configured as non-opaque with a clear background color.
+///
+/// # Safety
+/// Uses raw Objective-C messaging to configure NSWindow properties.
+pub unsafe fn configure_window_transparency(window: &Arc<Window>) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyObject, Bool};
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() else {
+        return;
+    };
+    let ns_view = appkit_handle.ns_view.as_ptr() as *mut AnyObject;
+    if ns_view.is_null() {
+        return;
+    }
+    let ns_window: *mut AnyObject = msg_send![ns_view, window];
+    if ns_window.is_null() {
+        return;
+    }
+
+    // NSWindow: setOpaque:NO and backgroundColor = [NSColor clearColor]
+    let _: () = msg_send![ns_window, setOpaque: Bool::NO];
+    let ns_color_class = objc2::class!(NSColor);
+    let clear_color: *mut AnyObject = msg_send![ns_color_class, clearColor];
+    let _: () = msg_send![ns_window, setBackgroundColor: clear_color];
+
+    // Also set ignoresMouseEvents so clicks pass through
+    let _: () = msg_send![ns_window, setIgnoresMouseEvents: Bool::YES];
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -112,11 +148,15 @@ impl WgpuRenderer {
         }))
         .ok_or("no compatible wgpu adapter")?;
 
+        // Use the adapter's limits to support high-resolution displays.
+        // downlevel_defaults() caps max_texture_dimension_2d at 2048 which is
+        // too small for Retina screens (e.g., 2940x1912).
+        let adapter_limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("aegis cursor device"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                required_limits: adapter_limits,
                 memory_hints: wgpu::MemoryHints::Performance,
             },
             None,
