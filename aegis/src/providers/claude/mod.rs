@@ -19,9 +19,9 @@ mod prompt;
 #[allow(unused_imports)]
 pub use classifier::Intent;
 #[allow(unused_imports)]
-pub use memory::MemoryStore;
-#[allow(unused_imports)]
 pub use history::HistoryStore;
+#[allow(unused_imports)]
+pub use memory::MemoryStore;
 
 /// A side-effecting action Claude requested via one of the tools in
 /// `run_agent_loop`. The streaming parser surfaces these in real time so the

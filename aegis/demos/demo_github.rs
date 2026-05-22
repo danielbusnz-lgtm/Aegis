@@ -19,7 +19,10 @@ fn dispatch(tool: &str, input: Value) -> Value {
         Ok(v) => {
             let pretty = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
             let preview: String = pretty.chars().take(500).collect();
-            println!("[ret ] {preview}{}", if pretty.len() > 500 { "..." } else { "" });
+            println!(
+                "[ret ] {preview}{}",
+                if pretty.len() > 500 { "..." } else { "" }
+            );
             v
         }
         Err(_) => {
@@ -37,10 +40,16 @@ fn main() {
     println!("github integration available, exercising tools...\n");
 
     step(1, "gh_my_prs (state=open)");
-    dispatch("gh_my_prs", serde_json::json!({ "state": "open", "limit": 3 }));
+    dispatch(
+        "gh_my_prs",
+        serde_json::json!({ "state": "open", "limit": 3 }),
+    );
 
     step(2, "gh_my_issues (state=open)");
-    let issues = dispatch("gh_my_issues", serde_json::json!({ "state": "open", "limit": 3 }));
+    let issues = dispatch(
+        "gh_my_issues",
+        serde_json::json!({ "state": "open", "limit": 3 }),
+    );
 
     // If we got at least one issue back, pick the first one and view it.
     if let Some(arr) = issues.as_array() {
@@ -64,7 +73,10 @@ fn main() {
     dispatch("gh_repo_view", serde_json::json!({ "repo": "cli/cli" }));
 
     step(6, "gh_actions_status (cli/cli)");
-    dispatch("gh_actions_status", serde_json::json!({ "repo": "cli/cli" }));
+    dispatch(
+        "gh_actions_status",
+        serde_json::json!({ "repo": "cli/cli" }),
+    );
 
     println!("\n=== all gh integration tools exercised ===");
 }

@@ -57,17 +57,8 @@ fn main() {
 
             // 1. Mouse position
             match mouse_position::mouse_movement() {
-                Ok((x, y)) => eprintln!(
-                    "[t={:>8.1?}] mouse at ({}, {})",
-                    t.elapsed(),
-                    x,
-                    y
-                ),
-                Err(e) => eprintln!(
-                    "[t={:>8.1?}] mouse query failed: {}",
-                    t.elapsed(),
-                    e
-                ),
+                Ok((x, y)) => eprintln!("[t={:>8.1?}] mouse at ({}, {})", t.elapsed(), x, y),
+                Err(e) => eprintln!("[t={:>8.1?}] mouse query failed: {}", t.elapsed(), e),
             }
 
             // 2. Screenshot
@@ -91,27 +82,15 @@ fn main() {
                                 b64.len()
                             );
                             let bytes = BASE64.decode(b64.as_bytes()).expect("base64 decode");
-                            let path = std::env::temp_dir()
-                                .join(format!("aegis_test_turn{}.jpg", turn));
+                            let path =
+                                std::env::temp_dir().join(format!("aegis_test_turn{}.jpg", turn));
                             std::fs::write(&path, &bytes).expect("write screenshot");
-                            eprintln!(
-                                "[t={:>8.1?}] saved: {}",
-                                t.elapsed(),
-                                path.display()
-                            );
+                            eprintln!("[t={:>8.1?}] saved: {}", t.elapsed(), path.display());
                         }
-                        Err(e) => eprintln!(
-                            "[t={:>8.1?}] capture failed: {}",
-                            t.elapsed(),
-                            e
-                        ),
+                        Err(e) => eprintln!("[t={:>8.1?}] capture failed: {}", t.elapsed(), e),
                     }
                 }
-                Err(e) => eprintln!(
-                    "[t={:>8.1?}] monitor query failed: {}",
-                    t.elapsed(),
-                    e
-                ),
+                Err(e) => eprintln!("[t={:>8.1?}] monitor query failed: {}", t.elapsed(), e),
             }
 
             // 3. Fly cursor to mouse position

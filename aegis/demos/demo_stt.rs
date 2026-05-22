@@ -21,12 +21,12 @@
 mod audio;
 #[path = "../src/hotkey/mod.rs"]
 mod hotkey;
+#[path = "../src/providers/mod.rs"]
+mod providers;
 #[path = "../src/screenshot/mod.rs"]
 mod screenshot;
 #[path = "../src/tuning.rs"]
 mod tuning;
-#[path = "../src/providers/mod.rs"]
-mod providers;
 
 use providers::stt_deepgram::SttDeepgram;
 use std::sync::Arc;
@@ -46,7 +46,10 @@ fn main() {
     println!("=================================");
     println!("STT pipeline test");
     println!("=================================");
-    println!("config: {}Hz, {}ch", running_mic.sample_rate, running_mic.channels);
+    println!(
+        "config: {}Hz, {}ch",
+        running_mic.sample_rate, running_mic.channels
+    );
     println!();
     println!("hold SUPER+space, talk, release. Ctrl+C to quit.");
     println!();
@@ -57,7 +60,10 @@ fn main() {
         let press_t = Instant::now();
 
         eprintln!();
-        eprintln!("════════════════════════ turn {} ════════════════════════", turn);
+        eprintln!(
+            "════════════════════════ turn {} ════════════════════════",
+            turn
+        );
         log_t(&press_t, "press detected");
 
         // Two-channel setup so we can intercept chunks between cpal and Deepgram.
@@ -138,13 +144,22 @@ fn main() {
         eprintln!();
         eprintln!("─── summary ───");
         eprintln!("  transcript            : {:?}", transcript);
-        eprintln!("  hold duration         : {:?}", release_t.duration_since(press_t));
-        eprintln!("  STT return after rel  : {:?}", stt_done_t.duration_since(release_t));
+        eprintln!(
+            "  hold duration         : {:?}",
+            release_t.duration_since(press_t)
+        );
+        eprintln!(
+            "  STT return after rel  : {:?}",
+            stt_done_t.duration_since(release_t)
+        );
         if let Some(first) = *first_chunk_at.lock().unwrap() {
             eprintln!("  first chunk after pre : {:?}", first);
         }
         eprintln!("  chunks forwarded      : {}", chunks);
-        eprintln!("  samples forwarded     : {} ({:.1}ms of audio)", samples, audio_ms);
+        eprintln!(
+            "  samples forwarded     : {} ({:.1}ms of audio)",
+            samples, audio_ms
+        );
         eprintln!();
 
         turn += 1;

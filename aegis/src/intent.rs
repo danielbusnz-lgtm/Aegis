@@ -86,12 +86,7 @@ fn matches_integration(padded: &str, lower: &str) -> bool {
         return true;
     }
     // Service names. Padded so "spotifying" doesn't false-positive.
-    let services = [
-        " spotify",
-        " gmail",
-        " github",
-        " youtube",
-    ];
+    let services = [" spotify", " gmail", " github", " youtube"];
     if services.iter().any(|s| padded.contains(s)) {
         return true;
     }
@@ -217,9 +212,15 @@ mod tests {
 
     #[test]
     fn integration_media_commands() {
-        assert_eq!(keyword_classify("play despacito"), Some(Intent::Integration));
+        assert_eq!(
+            keyword_classify("play despacito"),
+            Some(Intent::Integration)
+        );
         assert_eq!(keyword_classify("pause"), Some(Intent::Integration));
-        assert_eq!(keyword_classify("skip this song"), Some(Intent::Integration));
+        assert_eq!(
+            keyword_classify("skip this song"),
+            Some(Intent::Integration)
+        );
         assert_eq!(
             keyword_classify("what's playing right now"),
             Some(Intent::Integration)
@@ -252,10 +253,7 @@ mod tests {
             keyword_classify("click the play button"),
             Some(Intent::FindAction)
         );
-        assert_eq!(
-            keyword_classify("scroll down"),
-            Some(Intent::FindAction)
-        );
+        assert_eq!(keyword_classify("scroll down"), Some(Intent::FindAction));
     }
 
     #[test]

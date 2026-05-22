@@ -22,12 +22,12 @@
 //! Recording a sample (24kHz mono, 16-bit signed little-endian):
 //!   pw-record --rate 24000 --channels 1 --format s16 aegis/fixtures/sample.wav
 
+#[path = "../src/providers/mod.rs"]
+mod providers;
 #[path = "../src/screenshot/mod.rs"]
 mod screenshot;
 #[path = "../src/tuning.rs"]
 mod tuning;
-#[path = "../src/providers/mod.rs"]
-mod providers;
 
 use providers::stt_deepgram::SttDeepgram;
 use std::time::{Duration, Instant};
@@ -35,7 +35,10 @@ use std::time::{Duration, Instant};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: {} <wav_path> <expected_text> [iterations=5]", args[0]);
+        eprintln!(
+            "usage: {} <wav_path> <expected_text> [iterations=5]",
+            args[0]
+        );
         std::process::exit(1);
     }
     let wav_path = &args[1];
@@ -43,9 +46,15 @@ fn main() {
     let iterations: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5);
 
     let (samples, sample_rate, channels) = load_wav(wav_path);
-    let audio_duration_ms = (samples.len() as f64 / (sample_rate as f64 * channels as f64)) * 1000.0;
-    println!("loaded {wav_path}: {} samples, {}Hz, {}ch ({:.0}ms of audio)",
-             samples.len(), sample_rate, channels, audio_duration_ms);
+    let audio_duration_ms =
+        (samples.len() as f64 / (sample_rate as f64 * channels as f64)) * 1000.0;
+    println!(
+        "loaded {wav_path}: {} samples, {}Hz, {}ch ({:.0}ms of audio)",
+        samples.len(),
+        sample_rate,
+        channels,
+        audio_duration_ms
+    );
     println!("expected: {:?}", expected);
     println!("iterations: {iterations}");
     println!();
@@ -61,7 +70,9 @@ fn main() {
         print!("turn {}/{}: ", i + 1, iterations);
         let result = run_once(&rt, &stt, &samples, sample_rate, channels);
         let matched = normalize(&result.transcript) == normalize(expected);
-        if matched { matches += 1; }
+        if matched {
+            matches += 1;
+        }
         println!(
             "tail={:>6.1?}  match={}  transcript={:?}",
             result.tail,
@@ -120,9 +131,8 @@ fn run_once(
     });
 
     let stt = stt.clone();
-    let transcribe_task = rt.spawn(async move {
-        stt.transcribe_stream(sample_rate, channels, rx, None).await
-    });
+    let transcribe_task =
+        rt.spawn(async move { stt.transcribe_stream(sample_rate, channels, rx, None).await });
 
     rt.block_on(replay_task).expect("replay task panicked");
     let transcript = rt
@@ -130,7 +140,9 @@ fn run_once(
         .expect("transcribe task panicked")
         .expect("transcribe returned an error");
 
-    let stream_end_t = stream_end_marker.lock().unwrap()
+    let stream_end_t = stream_end_marker
+        .lock()
+        .unwrap()
         .expect("replay task should have set the marker");
     let tail = stream_end_t.elapsed();
 
@@ -138,8 +150,8 @@ fn run_once(
 }
 
 fn load_wav(path: &str) -> (Vec<i16>, u32, u16) {
-    let mut reader = hound::WavReader::open(path)
-        .unwrap_or_else(|e| panic!("could not open {path}: {e}"));
+    let mut reader =
+        hound::WavReader::open(path).unwrap_or_else(|e| panic!("could not open {path}: {e}"));
     let spec = reader.spec();
     assert_eq!(
         spec.sample_format,

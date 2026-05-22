@@ -381,10 +381,7 @@ async fn cmd_search(input: &serde_json::Value) -> String {
         }
     };
 
-    eprintln!(
-        "[gmail] cmd_search messages.list in {:?}",
-        t_list.elapsed()
-    );
+    eprintln!("[gmail] cmd_search messages.list in {:?}", t_list.elapsed());
     let stubs: Vec<serde_json::Value> = match list_body["messages"].as_array() {
         Some(a) => a.clone(),
         None => return "[]".to_string(),
@@ -461,10 +458,7 @@ async fn cmd_search(input: &serde_json::Value) -> String {
         t_gets.elapsed(),
         results.len()
     );
-    eprintln!(
-        "[gmail] cmd_search TOTAL {:?}",
-        t_total.elapsed()
-    );
+    eprintln!("[gmail] cmd_search TOTAL {:?}", t_total.elapsed());
 
     serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string())
 }
@@ -760,9 +754,10 @@ fn extract_body(payload: &serde_json::Value) -> String {
 
     if mime == "text/plain"
         && let Some(data) = payload["body"]["data"].as_str()
-            && let Ok(bytes) = URL_SAFE_NO_PAD.decode(data.trim_end_matches('=')) {
-                return String::from_utf8_lossy(&bytes).into_owned();
-            }
+        && let Ok(bytes) = URL_SAFE_NO_PAD.decode(data.trim_end_matches('='))
+    {
+        return String::from_utf8_lossy(&bytes).into_owned();
+    }
 
     if let Some(parts) = payload["parts"].as_array() {
         let plain = parts.iter().find(|p| p["mimeType"] == "text/plain");

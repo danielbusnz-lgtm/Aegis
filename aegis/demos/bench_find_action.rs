@@ -23,14 +23,14 @@
 
 #![allow(dead_code)]
 
+#[path = "../src/intent.rs"]
+mod intent;
+#[path = "../src/providers/mod.rs"]
+mod providers;
 #[path = "../src/screenshot/mod.rs"]
 mod screenshot;
 #[path = "../src/tuning.rs"]
 mod tuning;
-#[path = "../src/providers/mod.rs"]
-mod providers;
-#[path = "../src/intent.rs"]
-mod intent;
 
 use providers::claude::{Claude, Intent};
 use providers::stt_deepgram::SttDeepgram;
@@ -62,8 +62,7 @@ fn main() {
     // Load the WAV once. Each iteration replays the same bytes through
     // a fresh Deepgram WS so latency is comparable across runs.
     let (samples, sample_rate, channels) = load_wav(wav_path);
-    let audio_ms =
-        (samples.len() as f64 / (sample_rate as f64 * channels as f64)) * 1000.0;
+    let audio_ms = (samples.len() as f64 / (sample_rate as f64 * channels as f64)) * 1000.0;
     println!(
         "[setup] WAV: {} samples, {}Hz, {}ch ({:.0}ms of audio)",
         samples.len(),
@@ -76,13 +75,12 @@ fn main() {
     // find_action variance from per-iteration pixel changes would muddy
     // the timing data.
     let t_shot = Instant::now();
-    let (x, y, w, h) = screenshot::active_workspace_geometry()
-        .expect("could not get workspace geometry");
+    let (x, y, w, h) =
+        screenshot::active_workspace_geometry().expect("could not get workspace geometry");
     let (declared_w, declared_h) = screenshot::pick_declared_resolution(w as i64, h as i64);
-    let image_b64 = screenshot::capture_resized_for_claude(
-        x, y, w as i32, h as i32, declared_w, declared_h,
-    )
-    .expect("could not capture screenshot");
+    let image_b64 =
+        screenshot::capture_resized_for_claude(x, y, w as i32, h as i32, declared_w, declared_h)
+            .expect("could not capture screenshot");
     println!(
         "[setup] screenshot: {}×{} → {}×{} ({} KB) in {:?}",
         w,
@@ -98,14 +96,28 @@ fn main() {
     let mut results: Vec<RunResult> = Vec::with_capacity(iterations);
     for i in 0..iterations {
         println!("─── turn {}/{} ───", i + 1, iterations);
-        let r = run_once(&rt, &stt, &claude, &samples, sample_rate, channels, &image_b64, x, y, w, h);
+        let r = run_once(
+            &rt,
+            &stt,
+            &claude,
+            &samples,
+            sample_rate,
+            channels,
+            &image_b64,
+            x,
+            y,
+            w,
+            h,
+        );
         println!(
             "  transcript    : {:?}",
             r.transcript.as_deref().unwrap_or("(none)")
         );
         println!(
             "  intent        : {:?}",
-            r.intent.map(|i| format!("{:?}", i)).unwrap_or_else(|| "(none)".to_string())
+            r.intent
+                .map(|i| format!("{:?}", i))
+                .unwrap_or_else(|| "(none)".to_string())
         );
         println!("  stt tail      : {}", fmt_opt(r.stt));
         println!("  classify      : {}", fmt_opt(r.classify));
@@ -134,12 +146,18 @@ fn main() {
         iterations
     );
     print_stats("stt tail        ", results.iter().filter_map(|r| r.stt));
-    print_stats("classify        ", results.iter().filter_map(|r| r.classify));
+    print_stats(
+        "classify        ",
+        results.iter().filter_map(|r| r.classify),
+    );
     print_stats(
         "find_action     ",
         fa_eligible.iter().filter_map(|r| r.find_action),
     );
-    print_stats("total (full pipe)", fa_eligible.iter().filter_map(|r| r.total));
+    print_stats(
+        "total (full pipe)",
+        fa_eligible.iter().filter_map(|r| r.total),
+    );
 }
 
 struct RunResult {
@@ -188,9 +206,8 @@ fn run_once(
         drop(tx);
     });
     let stt = stt.clone();
-    let stt_task = rt.spawn(async move {
-        stt.transcribe_stream(sample_rate, channels, rx, None).await
-    });
+    let stt_task =
+        rt.spawn(async move { stt.transcribe_stream(sample_rate, channels, rx, None).await });
     let _ = rt.block_on(replay);
     let transcript = match rt.block_on(stt_task) {
         Ok(Ok(t)) => t,
@@ -309,8 +326,8 @@ fn empty_result() -> RunResult {
 }
 
 fn load_wav(path: &str) -> (Vec<i16>, u32, u16) {
-    let mut reader = hound::WavReader::open(path)
-        .unwrap_or_else(|e| panic!("could not open {path}: {e}"));
+    let mut reader =
+        hound::WavReader::open(path).unwrap_or_else(|e| panic!("could not open {path}: {e}"));
     let spec = reader.spec();
     assert_eq!(
         spec.sample_format,

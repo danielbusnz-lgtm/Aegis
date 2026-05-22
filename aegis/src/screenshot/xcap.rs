@@ -7,8 +7,7 @@ use std::io::Cursor;
 /// Returns the geometry (x, y, width, height) of the primary monitor.
 /// Cross-platform fallback: there's no consistent "active workspace" concept
 /// across Mac/Windows/Linux, so we use the primary monitor.
-pub fn active_workspace_geometry()
--> Result<(i32, i32, u32, u32), Box<dyn std::error::Error>> {
+pub fn active_workspace_geometry() -> Result<(i32, i32, u32, u32), Box<dyn std::error::Error>> {
     let monitors = ::xcap::Monitor::all()?;
     let monitor = monitors
         .into_iter()

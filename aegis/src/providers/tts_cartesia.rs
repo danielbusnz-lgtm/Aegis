@@ -181,9 +181,10 @@ impl TtsCartesia {
                     };
                     if event["type"] == "chunk"
                         && let Some(b64) = event["data"].as_str()
-                            && let Ok(pcm) = BASE64.decode(b64) {
-                                on_chunk(&pcm);
-                            }
+                        && let Ok(pcm) = BASE64.decode(b64)
+                    {
+                        on_chunk(&pcm);
+                    }
                 }
             }
         }

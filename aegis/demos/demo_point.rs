@@ -2,18 +2,18 @@
 
 #[path = "../src/ai_cursor/mod.rs"]
 mod ai_cursor;
+#[path = "../src/hotkey/mod.rs"]
+mod hotkey;
 #[path = "../src/mouse_position/mod.rs"]
 mod mouse_position;
 #[path = "../src/painter.rs"]
 mod painter;
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
-#[path = "../src/hotkey/mod.rs"]
-mod hotkey;
-#[path = "../src/tuning.rs"]
-mod tuning;
 #[path = "../src/providers/mod.rs"]
 mod providers;
+#[path = "../src/screenshot/mod.rs"]
+mod screenshot;
+#[path = "../src/tuning.rs"]
+mod tuning;
 
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;

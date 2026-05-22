@@ -48,8 +48,8 @@ impl Claude {
         T: FnMut(&str),
     {
         use crate::tuning::{
-            AGENT_KEEP_RECENT_SCREENSHOTS as KEEP_RECENT_SCREENSHOTS,
-            AGENT_MAX_STEPS as MAX_STEPS, AGENT_SETTLE_MS as SETTLE_MS,
+            AGENT_KEEP_RECENT_SCREENSHOTS as KEEP_RECENT_SCREENSHOTS, AGENT_MAX_STEPS as MAX_STEPS,
+            AGENT_SETTLE_MS as SETTLE_MS,
         };
 
         let (declared_w, declared_h) = pick_declared_resolution(window_width, window_height);
@@ -170,7 +170,9 @@ impl Claude {
                 use std::hash::{Hash, Hasher};
                 let mut h = std::collections::hash_map::DefaultHasher::new();
                 serde_json::to_vec(&system).unwrap_or_default().hash(&mut h);
-                serde_json::to_vec(&tools_value).unwrap_or_default().hash(&mut h);
+                serde_json::to_vec(&tools_value)
+                    .unwrap_or_default()
+                    .hash(&mut h);
                 h.finish()
             };
             eprintln!(
@@ -260,11 +262,7 @@ impl Claude {
                                 );
                             }
                             Some("error") => {
-                                eprintln!(
-                                    "[sse-debug] step {} ERROR event: {}",
-                                    step + 1,
-                                    event
-                                );
+                                eprintln!("[sse-debug] step {} ERROR event: {}", step + 1, event);
                             }
                             Some("content_block_start") => {
                                 if event["content_block"]["type"].as_str() == Some("tool_use") {
@@ -285,14 +283,15 @@ impl Claude {
                                         tool_json_buffer.push_str(j);
                                     }
                                 } else if delta_type == Some("text_delta")
-                                    && let Some(t) = event["delta"]["text"].as_str() {
-                                        text_content.push_str(t);
-                                        // The orchestrator pipes each delta
-                                        // through StreamHelper for
-                                        // sentence-boundary detection before
-                                        // pushing to TTS.
-                                        on_text_delta(t);
-                                    }
+                                    && let Some(t) = event["delta"]["text"].as_str()
+                                {
+                                    text_content.push_str(t);
+                                    // The orchestrator pipes each delta
+                                    // through StreamHelper for
+                                    // sentence-boundary detection before
+                                    // pushing to TTS.
+                                    on_text_delta(t);
+                                }
                             }
                             Some("message_stop") | Some("ping") => {
                                 // Expected events with no action required.
@@ -329,9 +328,8 @@ impl Claude {
                                             Some(Action::Integration) => {}
                                             Some(action) => on_action(action),
                                             None => {
-                                                let action_field = input["action"]
-                                                    .as_str()
-                                                    .unwrap_or("(none)");
+                                                let action_field =
+                                                    input["action"].as_str().unwrap_or("(none)");
                                                 eprintln!(
                                                     "[agent-loop] unhandled tool '{}' action='{}' input={}",
                                                     name, action_field, input_json
@@ -505,7 +503,11 @@ impl Claude {
             // visual context is dead weight (Claude is working with API
             // results, not pixels), so drop ALL prior screenshots in that
             // case. Cuts subsequent request size from ~270KB to a few KB.
-            let keep = if all_integration { 0 } else { KEEP_RECENT_SCREENSHOTS };
+            let keep = if all_integration {
+                0
+            } else {
+                KEEP_RECENT_SCREENSHOTS
+            };
             trim_old_screenshots(&mut messages, keep);
 
             eprintln!(

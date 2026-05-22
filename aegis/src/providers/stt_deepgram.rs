@@ -32,8 +32,13 @@ pub struct SttDeepgram {
 /// `AEGIS_DEEPGRAM_DIRECT=1` (useful for dev / burning your own quota).
 #[derive(Clone)]
 pub enum SttMode {
-    Direct { api_key: String },
-    Proxy { token_url: String, device_id: String },
+    Direct {
+        api_key: String,
+    },
+    Proxy {
+        token_url: String,
+        device_id: String,
+    },
 }
 
 impl SttDeepgram {
@@ -80,7 +85,10 @@ impl SttDeepgram {
     async fn auth_header(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         match &self.mode {
             SttMode::Direct { api_key } => Ok(format!("Token {}", api_key)),
-            SttMode::Proxy { token_url, device_id } => {
+            SttMode::Proxy {
+                token_url,
+                device_id,
+            } => {
                 let resp = self
                     .http
                     .post(token_url)
@@ -136,9 +144,7 @@ impl SttDeepgram {
         // attach the Authorization header. tokio-tungstenite auto-fills the
         // mandatory handshake headers (Sec-WebSocket-Key, Upgrade, etc.).
         let mut request = url.into_client_request()?;
-        request
-            .headers_mut()
-            .insert("Authorization", auth.parse()?);
+        request.headers_mut().insert("Authorization", auth.parse()?);
 
         let t_connect = std::time::Instant::now();
         let (ws_stream, _) = tokio_tungstenite::connect_async(request).await?;
@@ -256,7 +262,10 @@ impl SttDeepgram {
             match tokio::time::timeout(read_budget, read.next()).await {
                 Err(_) => {
                     if !finalized.is_empty() {
-                        eprintln!("[deepgram-debug] quiescence after final ({}ms)", QUIESCENCE_MS);
+                        eprintln!(
+                            "[deepgram-debug] quiescence after final ({}ms)",
+                            QUIESCENCE_MS
+                        );
                         break;
                     }
                     // No content yet; loop continues until outer deadline.

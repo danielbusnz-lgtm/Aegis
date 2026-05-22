@@ -56,7 +56,10 @@ pub fn check_and_print() {
         .collect();
     reports.sort_by_key(|r| r.name);
 
-    eprintln!("[health] integration checks ({}ms total):", t0.elapsed().as_millis());
+    eprintln!(
+        "[health] integration checks ({}ms total):",
+        t0.elapsed().as_millis()
+    );
     for r in &reports {
         let (tag, detail) = match &r.status {
             Status::Ok(d) => ("OK  ", d.as_str()),

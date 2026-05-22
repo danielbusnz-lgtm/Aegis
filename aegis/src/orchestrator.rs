@@ -118,11 +118,7 @@ fn run_one_turn(
     } else {
         let claude = claude.clone();
         let transcript_for_classifier = transcript.clone();
-        Some(rt.spawn(async move {
-            claude
-                .classify_intent(&transcript_for_classifier)
-                .await
-        }))
+        Some(rt.spawn(async move { claude.classify_intent(&transcript_for_classifier).await }))
     };
 
     let t_ss_join = std::time::Instant::now();
@@ -192,8 +188,7 @@ fn run_one_turn(
     // ────── phase 3: shared per-turn infra (barge-in, TTS pipeline) ──────
     let barge_in = BargeIn::start();
     let early_exit = CancellationToken::new();
-    let (sentence_tx, mut sentence_rx) =
-        tokio::sync::mpsc::unbounded_channel::<String>();
+    let (sentence_tx, mut sentence_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let cartesia_for_tts = cartesia.clone();
     let cancel_tts = barge_in.token();
     let early_exit_tts = early_exit.clone();
@@ -266,31 +261,71 @@ fn run_one_turn(
     print!("claude: ");
     rt.block_on(async {
         match intent {
-            Intent::FindAction => run_find_action(
-                claude, &transcript, &resized_b64, x, y, w, h,
-                release_t, &early_exit, &cancel_claude, &sentence_tx,
-            )
-            .await,
-            Intent::Chat => run_chat(
-                claude, &transcript, memory, release_t,
-                &cancel_claude, &sentence_tx,
-            )
-            .await,
-            Intent::Integration => run_integration(
-                claude, &transcript, memory, release_t,
-                &cancel_claude, &sentence_tx,
-            )
-            .await,
-            Intent::Memory => run_memory(
-                claude, &transcript, memory, release_t,
-                &cancel_claude, &sentence_tx,
-            )
-            .await,
-            Intent::Agent => run_agent(
-                claude, &transcript, &resized_b64, x, y, w, h,
-                release_t, &early_exit, &cancel_claude, &sentence_tx,
-            )
-            .await,
+            Intent::FindAction => {
+                run_find_action(
+                    claude,
+                    &transcript,
+                    &resized_b64,
+                    x,
+                    y,
+                    w,
+                    h,
+                    release_t,
+                    &early_exit,
+                    &cancel_claude,
+                    &sentence_tx,
+                )
+                .await
+            }
+            Intent::Chat => {
+                run_chat(
+                    claude,
+                    &transcript,
+                    memory,
+                    release_t,
+                    &cancel_claude,
+                    &sentence_tx,
+                )
+                .await
+            }
+            Intent::Integration => {
+                run_integration(
+                    claude,
+                    &transcript,
+                    memory,
+                    release_t,
+                    &cancel_claude,
+                    &sentence_tx,
+                )
+                .await
+            }
+            Intent::Memory => {
+                run_memory(
+                    claude,
+                    &transcript,
+                    memory,
+                    release_t,
+                    &cancel_claude,
+                    &sentence_tx,
+                )
+                .await
+            }
+            Intent::Agent => {
+                run_agent(
+                    claude,
+                    &transcript,
+                    &resized_b64,
+                    x,
+                    y,
+                    w,
+                    h,
+                    release_t,
+                    &early_exit,
+                    &cancel_claude,
+                    &sentence_tx,
+                )
+                .await
+            }
         }
     });
     println!();
@@ -347,10 +382,7 @@ async fn run_find_action(
 ) {
     let early_exit_action = early_exit.clone();
     let action_cb = move |action| {
-        eprintln!(
-            "[timing] claude first response → {:?}",
-            release_t.elapsed()
-        );
+        eprintln!("[timing] claude first response → {:?}", release_t.elapsed());
         eprintln!(
             "[timing] ACTION FIRES → {:?}: {:?}",
             release_t.elapsed(),
@@ -506,15 +538,14 @@ async fn run_agent(
     cancel_claude: &CancellationToken,
     sentence_tx: &tokio::sync::mpsc::UnboundedSender<String>,
 ) {
-    let take_screenshot =
-        move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-            let (cx, cy, cw, ch) = screenshot::active_workspace_geometry()
-                .map(|g| (g.0, g.1, g.2 as i32, g.3 as i32))
-                .unwrap_or((x, y, w as i32, h as i32));
-            let (dw, dh) = screenshot::pick_declared_resolution(cw as i64, ch as i64);
-            screenshot::capture_resized_for_claude(cx, cy, cw, ch, dw, dh)
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })
-        };
+    let take_screenshot = move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let (cx, cy, cw, ch) = screenshot::active_workspace_geometry()
+            .map(|g| (g.0, g.1, g.2 as i32, g.3 as i32))
+            .unwrap_or((x, y, w as i32, h as i32));
+        let (dw, dh) = screenshot::pick_declared_resolution(cw as i64, ch as i64);
+        screenshot::capture_resized_for_claude(cx, cy, cw, ch, dw, dh)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })
+    };
 
     let running_apps = crate::actions::list_running_apps();
     eprintln!(
@@ -635,10 +666,7 @@ struct StreamHelper {
 }
 
 impl StreamHelper {
-    fn new(
-        tx: tokio::sync::mpsc::UnboundedSender<String>,
-        release_t: std::time::Instant,
-    ) -> Self {
+    fn new(tx: tokio::sync::mpsc::UnboundedSender<String>, release_t: std::time::Instant) -> Self {
         Self {
             buf: String::new(),
             tx,
@@ -740,9 +768,10 @@ fn find_sentence_end(buf: &str) -> Option<usize> {
     let bytes = buf.as_bytes();
     for i in 0..bytes.len() {
         if matches!(bytes[i], b'.' | b'!' | b'?')
-            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t')) {
-                return Some(i);
-            }
+            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t'))
+        {
+            return Some(i);
+        }
     }
     None
 }
@@ -755,13 +784,17 @@ fn find_first_flush_point(buf: &str) -> Option<usize> {
     let bytes = buf.as_bytes();
     for i in 0..bytes.len() {
         if matches!(bytes[i], b'.' | b'!' | b'?')
-            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t')) {
-                return Some(i);
-            }
-        if i >= MIN_LEN && matches!(bytes[i], b',' | b';' | b':')
-            && i + 1 < bytes.len() && matches!(bytes[i + 1], b' ' | b'\n' | b'\t') {
-                return Some(i);
-            }
+            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b' ' | b'\n' | b'\t'))
+        {
+            return Some(i);
+        }
+        if i >= MIN_LEN
+            && matches!(bytes[i], b',' | b';' | b':')
+            && i + 1 < bytes.len()
+            && matches!(bytes[i + 1], b' ' | b'\n' | b'\t')
+        {
+            return Some(i);
+        }
     }
     None
 }

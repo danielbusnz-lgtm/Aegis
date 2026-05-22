@@ -34,13 +34,11 @@ impl Claude {
         // chunk (always identical) and the user profile (stable per
         // session, changes only when memory is rewritten). Two breakpoints
         // let Claude reuse the first block even when profile changes.
-        let mut system_blocks = vec![
-            serde_json::json!({
-                "type": "text",
-                "text": chat_system_prompt(),
-                "cache_control": { "type": "ephemeral" }
-            }),
-        ];
+        let mut system_blocks = vec![serde_json::json!({
+            "type": "text",
+            "text": chat_system_prompt(),
+            "cache_control": { "type": "ephemeral" }
+        })];
         if let Some(profile) = user_profile.filter(|p| !p.trim().is_empty()) {
             system_blocks.push(serde_json::json!({
                 "type": "text",
@@ -103,10 +101,11 @@ impl Claude {
                     };
                     if event["type"].as_str() == Some("content_block_delta")
                         && event["delta"]["type"].as_str() == Some("text_delta")
-                        && let Some(t) = event["delta"]["text"].as_str() {
-                            text_content.push_str(t);
-                            on_text_delta(t);
-                        }
+                        && let Some(t) = event["delta"]["text"].as_str()
+                    {
+                        text_content.push_str(t);
+                        on_text_delta(t);
+                    }
                 }
             }
         }

@@ -197,74 +197,115 @@ fn run_gh(args: &[&str]) -> String {
 }
 
 fn require_str<'a>(input: &'a serde_json::Value, field: &str) -> Result<&'a str, String> {
-    input[field].as_str().ok_or_else(|| {
-        format!(
-            r#"{{"error":"missing required string field '{field}'"}}"#
-        )
-    })
+    input[field]
+        .as_str()
+        .ok_or_else(|| format!(r#"{{"error":"missing required string field '{field}'"}}"#))
 }
 
 fn require_int(input: &serde_json::Value, field: &str) -> Result<i64, String> {
-    input[field].as_i64().ok_or_else(|| {
-        format!(
-            r#"{{"error":"missing required integer field '{field}'"}}"#
-        )
-    })
+    input[field]
+        .as_i64()
+        .ok_or_else(|| format!(r#"{{"error":"missing required integer field '{field}'"}}"#))
 }
 
 fn my_prs(input: &serde_json::Value) -> String {
     let state = input["state"].as_str().unwrap_or("open");
-    let limit = input["limit"].as_u64().unwrap_or(5).clamp(1, 25).to_string();
+    let limit = input["limit"]
+        .as_u64()
+        .unwrap_or(5)
+        .clamp(1, 25)
+        .to_string();
     run_gh(&[
-        "search", "prs",
-        "--author", "@me",
-        "--state", state,
-        "--limit", &limit,
-        "--json", "number,title,repository,state,url,createdAt",
+        "search",
+        "prs",
+        "--author",
+        "@me",
+        "--state",
+        state,
+        "--limit",
+        &limit,
+        "--json",
+        "number,title,repository,state,url,createdAt",
     ])
 }
 
 fn pr_view(input: &serde_json::Value) -> String {
-    let repo = match require_str(input, "repo") { Ok(v) => v, Err(e) => return e };
-    let number = match require_int(input, "number") { Ok(v) => v, Err(e) => return e };
+    let repo = match require_str(input, "repo") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let number = match require_int(input, "number") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
     let number_s = number.to_string();
     run_gh(&[
-        "pr", "view", &number_s,
-        "--repo", repo,
-        "--json", "number,title,body,state,isDraft,author,headRefName,baseRefName,url,additions,deletions,reviewDecision,statusCheckRollup,createdAt",
+        "pr",
+        "view",
+        &number_s,
+        "--repo",
+        repo,
+        "--json",
+        "number,title,body,state,isDraft,author,headRefName,baseRefName,url,additions,deletions,reviewDecision,statusCheckRollup,createdAt",
     ])
 }
 
 fn my_issues(input: &serde_json::Value) -> String {
     let state = input["state"].as_str().unwrap_or("open");
-    let limit = input["limit"].as_u64().unwrap_or(5).clamp(1, 25).to_string();
+    let limit = input["limit"]
+        .as_u64()
+        .unwrap_or(5)
+        .clamp(1, 25)
+        .to_string();
     run_gh(&[
-        "search", "issues",
-        "--author", "@me",
-        "--state", state,
-        "--limit", &limit,
-        "--json", "number,title,repository,state,url,createdAt",
+        "search",
+        "issues",
+        "--author",
+        "@me",
+        "--state",
+        state,
+        "--limit",
+        &limit,
+        "--json",
+        "number,title,repository,state,url,createdAt",
     ])
 }
 
 fn issue_view(input: &serde_json::Value) -> String {
-    let repo = match require_str(input, "repo") { Ok(v) => v, Err(e) => return e };
-    let number = match require_int(input, "number") { Ok(v) => v, Err(e) => return e };
+    let repo = match require_str(input, "repo") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let number = match require_int(input, "number") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
     let number_s = number.to_string();
     run_gh(&[
-        "issue", "view", &number_s,
-        "--repo", repo,
-        "--json", "number,title,body,state,labels,author,url,comments,createdAt",
+        "issue",
+        "view",
+        &number_s,
+        "--repo",
+        repo,
+        "--json",
+        "number,title,body,state,labels,author,url,comments,createdAt",
     ])
 }
 
 fn actions_status(input: &serde_json::Value) -> String {
-    let repo = match require_str(input, "repo") { Ok(v) => v, Err(e) => return e };
+    let repo = match require_str(input, "repo") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
     run_gh(&[
-        "run", "list",
-        "--repo", repo,
-        "--limit", "5",
-        "--json", "status,conclusion,name,event,headBranch,createdAt,url,displayTitle",
+        "run",
+        "list",
+        "--repo",
+        repo,
+        "--limit",
+        "5",
+        "--json",
+        "status,conclusion,name,event,headBranch,createdAt,url,displayTitle",
     ])
 }
 
@@ -272,16 +313,23 @@ fn notifications(input: &serde_json::Value) -> String {
     let limit = input["limit"].as_u64().unwrap_or(5).clamp(1, 25);
     let endpoint = format!("notifications?per_page={limit}");
     run_gh(&[
-        "api", &endpoint,
+        "api",
+        &endpoint,
         "--jq",
         "[.[] | {subject: .subject.title, type: .subject.type, repo: .repository.full_name, reason, updated_at}]",
     ])
 }
 
 fn repo_view(input: &serde_json::Value) -> String {
-    let repo = match require_str(input, "repo") { Ok(v) => v, Err(e) => return e };
+    let repo = match require_str(input, "repo") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
     run_gh(&[
-        "repo", "view", repo,
-        "--json", "name,owner,description,stargazerCount,defaultBranchRef,visibility,url,updatedAt",
+        "repo",
+        "view",
+        repo,
+        "--json",
+        "name,owner,description,stargazerCount,defaultBranchRef,visibility,url,updatedAt",
     ])
 }

@@ -23,12 +23,7 @@ impl VoiceSession {
     /// Build the per-process session: create the tokio runtime, warm HTTP
     /// pools to all three providers in parallel, start the persistent cpal
     /// mic stream, and open the audio output sink.
-    pub fn start(
-        mic: audio::Mic,
-        stt: SttDeepgram,
-        claude: Claude,
-        cartesia: TtsCartesia,
-    ) -> Self {
+    pub fn start(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: TtsCartesia) -> Self {
         // Tokio runtime owned by this thread. Streaming providers (Deepgram WS,
         // Claude SSE, Cartesia SSE) all run via `rt.block_on(...)`.
         let rt = tokio::runtime::Runtime::new().expect("failed to start tokio runtime");
@@ -54,8 +49,7 @@ impl VoiceSession {
         // Load persistent memory facts (name, preferences, etc.). Empty
         // store on first launch; subsequent launches re-load from
         // ~/.config/aegis/memory.jsonl.
-        let memory = MemoryStore::open_default()
-            .expect("could not open aegis memory store");
+        let memory = MemoryStore::open_default().expect("could not open aegis memory store");
 
         VoiceSession {
             rt,

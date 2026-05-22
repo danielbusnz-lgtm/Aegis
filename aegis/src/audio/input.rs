@@ -72,7 +72,8 @@ impl Mic {
         let output_channels: u16 = 1;
 
         let preroll_max_samples =
-            (self.sample_rate as usize) * (output_channels as usize) * (AUDIO_PREROLL_MS as usize) / 1000;
+            (self.sample_rate as usize) * (output_channels as usize) * (AUDIO_PREROLL_MS as usize)
+                / 1000;
         let state = Arc::new(Mutex::new(MicState {
             current_tx: None,
             preroll: Preroll::new(preroll_max_samples),
@@ -409,10 +410,9 @@ fn default_source_alsa_card_id() -> Option<String> {
             in_target_block = name == default_source;
             continue;
         }
-        if in_target_block
-            && let Some(rest) = trimmed.strip_prefix("alsa.id = ") {
-                return Some(rest.trim_matches('"').to_string());
-            }
+        if in_target_block && let Some(rest) = trimmed.strip_prefix("alsa.id = ") {
+            return Some(rest.trim_matches('"').to_string());
+        }
     }
     None
 }

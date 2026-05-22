@@ -80,8 +80,10 @@ fn main() {
     );
     let arr = search.as_array().cloned().unwrap_or_default();
     if arr.is_empty() {
-        eprintln!("search returned 0 results. Gmail may need a few more seconds, \
-                   or the send silently failed.");
+        eprintln!(
+            "search returned 0 results. Gmail may need a few more seconds, \
+                   or the send silently failed."
+        );
         std::process::exit(1);
     }
     let msg_id = arr[0]["id"].as_str().unwrap_or("").to_string();
@@ -90,7 +92,12 @@ fn main() {
     step(4, "gmail_read (full body of that message)");
     let read = dispatch_or_die("gmail_read", serde_json::json!({ "id": msg_id }));
     let subject = read["subject"].as_str().unwrap_or("");
-    let body_preview = read["body"].as_str().unwrap_or("").chars().take(80).collect::<String>();
+    let body_preview = read["body"]
+        .as_str()
+        .unwrap_or("")
+        .chars()
+        .take(80)
+        .collect::<String>();
     println!("subject='{subject}' body_preview='{body_preview}'");
 
     step(5, "gmail_draft (compose a reply draft, do not send)");

@@ -103,12 +103,10 @@ impl Claude {
                             if event["content_block"]["type"].as_str() == Some("tool_use") {
                                 current_block_is_tool = true;
                                 if tool_name.is_none() {
-                                    tool_name = event["content_block"]["name"]
-                                        .as_str()
-                                        .map(str::to_string);
-                                    tool_id = event["content_block"]["id"]
-                                        .as_str()
-                                        .map(str::to_string);
+                                    tool_name =
+                                        event["content_block"]["name"].as_str().map(str::to_string);
+                                    tool_id =
+                                        event["content_block"]["id"].as_str().map(str::to_string);
                                 }
                                 tool_json_buffer.clear();
                             } else {
@@ -118,9 +116,10 @@ impl Claude {
                         Some("content_block_delta") => {
                             if current_block_is_tool
                                 && event["delta"]["type"].as_str() == Some("input_json_delta")
-                                && let Some(j) = event["delta"]["partial_json"].as_str() {
-                                    tool_json_buffer.push_str(j);
-                                }
+                                && let Some(j) = event["delta"]["partial_json"].as_str()
+                            {
+                                tool_json_buffer.push_str(j);
+                            }
                         }
                         _ => {}
                     }
@@ -228,10 +227,11 @@ impl Claude {
                     };
                     if event["type"].as_str() == Some("content_block_delta")
                         && event["delta"]["type"].as_str() == Some("text_delta")
-                        && let Some(t) = event["delta"]["text"].as_str() {
-                            text_content.push_str(t);
-                            on_text_delta(t);
-                        }
+                        && let Some(t) = event["delta"]["text"].as_str()
+                    {
+                        text_content.push_str(t);
+                        on_text_delta(t);
+                    }
                 }
             }
         }

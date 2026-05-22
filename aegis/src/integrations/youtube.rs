@@ -75,7 +75,10 @@ pub fn dispatch(name: &str, input: &serde_json::Value) -> Option<String> {
 /// routing (which respects AEGIS_BROWSER + focused-window detection).
 /// yt-dlp blocks ~1-3s; acceptable for one-shot voice intent.
 fn play(query: &str) {
-    eprintln!("[integration:youtube] resolving first result for '{}'", query);
+    eprintln!(
+        "[integration:youtube] resolving first result for '{}'",
+        query
+    );
     let search = format!("ytsearch1:{}", query);
     let output = Command::new("yt-dlp")
         .args(["--get-id", "--no-warnings", &search])

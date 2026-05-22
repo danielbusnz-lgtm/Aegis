@@ -76,13 +76,12 @@ fn build_ui(app: &Application) {
             // i == head → 0 (brightest). i one step behind → 1. etc.
             let dist = (head - i as f64).rem_euclid(N_BARS as f64);
             // Linear fade: 1.0 at head, ALPHA_FLOOR at the bar farthest behind.
-            let alpha =
-                ALPHA_FLOOR + (1.0 - ALPHA_FLOOR) * (1.0 - dist / (N_BARS - 1) as f64);
+            let alpha = ALPHA_FLOOR + (1.0 - ALPHA_FLOOR) * (1.0 - dist / (N_BARS - 1) as f64);
 
             // Position each bar at its angle around the circle. Subtract π/2
             // so bar 0 sits at 12 o'clock instead of 3 o'clock.
-            let angle = (i as f64 / N_BARS as f64) * std::f64::consts::TAU
-                - std::f64::consts::FRAC_PI_2;
+            let angle =
+                (i as f64 / N_BARS as f64) * std::f64::consts::TAU - std::f64::consts::FRAC_PI_2;
 
             cr.save().expect("save");
             cr.translate(cx, cy);

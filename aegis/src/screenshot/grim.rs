@@ -9,8 +9,7 @@ use std::process::Command;
 /// Returns the geometry (x, y, width, height) of the monitor showing the
 /// currently active workspace, without capturing a screenshot. Used by
 /// callers that delegate the capture step (e.g., `detect_element_location`).
-pub fn active_workspace_geometry()
--> Result<(i32, i32, u32, u32), Box<dyn std::error::Error>> {
+pub fn active_workspace_geometry() -> Result<(i32, i32, u32, u32), Box<dyn std::error::Error>> {
     let active = Workspace::get_active()?;
     let monitor = Monitors::get()?
         .into_iter()
@@ -96,4 +95,3 @@ pub fn pick_declared_resolution(window_width: i64, window_height: i64) -> (u32, 
     }
     (best.0, best.1)
 }
-

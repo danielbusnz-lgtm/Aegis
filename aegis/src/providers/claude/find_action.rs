@@ -140,9 +140,8 @@ impl Claude {
                     match event["type"].as_str() {
                         Some("content_block_start") => {
                             if event["content_block"]["type"].as_str() == Some("tool_use") {
-                                current_tool_name = event["content_block"]["name"]
-                                    .as_str()
-                                    .map(str::to_string);
+                                current_tool_name =
+                                    event["content_block"]["name"].as_str().map(str::to_string);
                                 tool_json_buffer.clear();
                             } else {
                                 current_tool_name = None;
@@ -150,42 +149,44 @@ impl Claude {
                         }
                         Some("content_block_delta") => {
                             if event["delta"]["type"].as_str() == Some("input_json_delta")
-                                && let Some(j) = event["delta"]["partial_json"].as_str() {
-                                    tool_json_buffer.push_str(j);
-                                }
+                                && let Some(j) = event["delta"]["partial_json"].as_str()
+                            {
+                                tool_json_buffer.push_str(j);
+                            }
                         }
                         Some("content_block_stop") => {
                             if emitted.is_none()
-                                && let Some(name) = current_tool_name.take() {
-                                    let input_json = if tool_json_buffer.is_empty() {
-                                        "{}".to_string()
+                                && let Some(name) = current_tool_name.take()
+                            {
+                                let input_json = if tool_json_buffer.is_empty() {
+                                    "{}".to_string()
+                                } else {
+                                    tool_json_buffer.clone()
+                                };
+                                if let Ok(input) =
+                                    serde_json::from_str::<serde_json::Value>(&input_json)
+                                {
+                                    if let Some(action) = parse_tool_call(
+                                        &name,
+                                        &input,
+                                        declared_w,
+                                        declared_h,
+                                        window_x,
+                                        window_y,
+                                        window_width,
+                                        window_height,
+                                    ) {
+                                        on_action(action.clone());
+                                        emitted = Some(action);
                                     } else {
-                                        tool_json_buffer.clone()
-                                    };
-                                    if let Ok(input) =
-                                        serde_json::from_str::<serde_json::Value>(&input_json)
-                                    {
-                                        if let Some(action) = parse_tool_call(
-                                            &name,
-                                            &input,
-                                            declared_w,
-                                            declared_h,
-                                            window_x,
-                                            window_y,
-                                            window_width,
-                                            window_height,
-                                        ) {
-                                            on_action(action.clone());
-                                            emitted = Some(action);
-                                        } else {
-                                            eprintln!(
-                                                "[find_action] unknown tool '{}' input={}",
-                                                name, input_json
-                                            );
-                                        }
+                                        eprintln!(
+                                            "[find_action] unknown tool '{}' input={}",
+                                            name, input_json
+                                        );
                                     }
-                                    tool_json_buffer.clear();
                                 }
+                                tool_json_buffer.clear();
+                            }
                         }
                         _ => {}
                     }
