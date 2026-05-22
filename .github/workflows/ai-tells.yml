@@ -5,8 +5,9 @@
 #      templates as an instruction directed at AI assistants). LLMs that
 #      read the template tend to follow the instruction; humans skip it.
 #      Strong signal => `ai-confessed` label.
-#   2. Lexical signals: em/en dash usage or any emoji. Weaker signal,
-#      higher false-positive rate => `possibly-ai` label.
+#   2. Emoji of any kind. Reliable AI tell in technical bug reports.
+#      Weaker than the trap, but still uncommon in real human prose
+#      here => `possibly-ai` label.
 #
 # Bypass:
 #   - author_association is OWNER, MEMBER, or COLLABORATOR
@@ -62,12 +63,10 @@ jobs:
             // templates. Case-insensitive, tolerant of whitespace.
             const trapHit = /acknowledged\s*:\s*drafted by ai/i.test(text);
 
-            // Weak signal: U+2014 em dash, U+2013 en dash, or any emoji.
-            // Plain ASCII hyphens and Markdown table separators are not
-            // affected.
-            const emDashCount = (text.match(/[—–]/g) || []).length;
+            // Weak signal: any emoji. Extended_Pictographic catches every
+            // modern emoji including ZWJ sequences and skin-tone modifiers.
             const emojiCount = (text.match(/\p{Extended_Pictographic}/gu) || []).length;
-            const lexicalHit = emDashCount > 0 || emojiCount > 0;
+            const lexicalHit = emojiCount > 0;
 
             if (!trapHit && !lexicalHit) {
               core.info(`Skipping ${number}: no AI tells found`);
@@ -87,5 +86,5 @@ jobs:
 
             core.info(
               `Labeled #${number} from ${author}: ${toApply.join(', ')} ` +
-                `(trap=${trapHit}, emdashes=${emDashCount}, emojis=${emojiCount})`
+                `(trap=${trapHit}, emojis=${emojiCount})`
             );
