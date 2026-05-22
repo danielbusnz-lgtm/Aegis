@@ -10,18 +10,37 @@ const ONBOARDING_URL: &str = "onboarding/macos.html";
 #[cfg(not(target_os = "macos"))]
 const ONBOARDING_URL: &str = "onboarding/index.html";
 
-/// Launch the actual aegis cursor + voice agent as a child process. Looks for
-/// the binary in the workspace's debug then release target dirs; for shipped
-/// builds we'd bundle it next to the launcher instead.
+/// Launch the actual aegis cursor + voice agent as a child process.
+///
+/// Path lookup order:
+/// 1. `../../target/{debug,release}/aegis`: workspace dev layout, the case
+///    when `cargo tauri dev` runs from `launcher/` and the launcher binary
+///    has cwd of `launcher/src-tauri/`.
+/// 2. `target/{debug,release}/aegis`: workspace root cwd (e.g. someone
+///    launches the launcher binary directly from `/Projects/aegis/`).
+/// 3. `./aegis`: sibling-of-binary layout, used by shipped `.app` bundles
+///    where both launcher and aegis live in `Contents/MacOS/`.
 #[tauri::command]
 fn spawn_aegis() -> Result<(), String> {
-    let candidates = ["target/debug/aegis", "target/release/aegis"];
+    let candidates = [
+        "../../target/debug/aegis",
+        "../../target/release/aegis",
+        "target/debug/aegis",
+        "target/release/aegis",
+        "./aegis",
+    ];
     for path in candidates {
-        if Command::new(path).spawn().is_ok() {
-            return Ok(());
+        if std::path::Path::new(path).exists() {
+            if let Ok(_child) = Command::new(path).spawn() {
+                return Ok(());
+            }
         }
     }
-    Err("aegis binary not found in target/debug or target/release. Build it with `cargo build -p aegis` first.".to_string())
+    Err(format!(
+        "aegis binary not found. Tried: {}. Build it with \
+         `cargo build -p aegis --no-default-features --features winit-window,crossplatform` first.",
+        candidates.join(", ")
+    ))
 }
 
 fn main() {
