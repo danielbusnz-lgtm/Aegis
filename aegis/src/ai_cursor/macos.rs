@@ -74,6 +74,17 @@ pub unsafe fn configure_window_transparency(window: &Arc<Window>) {
     // (= floating level). NSStatusWindowLevel = 25, the same level
     // macOS uses for menu bar items and tooltips.
     let _: () = msg_send![ns_window, setLevel: 25_i64];
+
+    // Make the cursor visible everywhere, not just on the Space it was
+    // created in. Two flags ORed together:
+    //   NSWindowCollectionBehaviorCanJoinAllSpaces      (1 << 0 = 1)
+    //   NSWindowCollectionBehaviorFullScreenAuxiliary   (1 << 8 = 256)
+    // CanJoinAllSpaces: the window follows the user across virtual
+    //   desktops instead of being bound to the one it spawned in.
+    // FullScreenAuxiliary: lets the window draw over apps that have
+    //   gone into native fullscreen mode (Mission Control space).
+    let collection_behavior: u64 = 1 | 256;
+    let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
 }
 
 // ────────────────────────────────────────────────────────────────────────

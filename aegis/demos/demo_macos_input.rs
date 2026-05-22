@@ -1,13 +1,25 @@
 //! Test macOS native input injection (click, type, key)
 //!
 //! Run with: cargo run --no-default-features --features winit-window --bin demo_macos_input
+//!
+//! macOS only. On other platforms `main` is a stub so the workspace still
+//! compiles cleanly with `--all-targets`.
 
+#[cfg(target_os = "macos")]
 #[path = "../src/actions.rs"]
 mod actions;
 
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("demo_macos_input is macOS-only");
+}
+
+#[cfg(target_os = "macos")]
 use std::thread;
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
 fn main() {
     println!("=== macOS Input Injection Test ===\n");
     println!("This will test click, type, and key press functionality.");
