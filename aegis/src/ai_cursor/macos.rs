@@ -68,6 +68,12 @@ pub unsafe fn configure_window_transparency(window: &Arc<Window>) {
 
     // Also set ignoresMouseEvents so clicks pass through
     let _: () = msg_send![ns_window, setIgnoresMouseEvents: Bool::YES];
+
+    // Lift above NSFloatingWindowLevel (3) so the cursor sits on top of
+    // the Tauri launcher's onboarding window, which uses always-on-top
+    // (= floating level). NSStatusWindowLevel = 25, the same level
+    // macOS uses for menu bar items and tooltips.
+    let _: () = msg_send![ns_window, setLevel: 25_i64];
 }
 
 // ────────────────────────────────────────────────────────────────────────
