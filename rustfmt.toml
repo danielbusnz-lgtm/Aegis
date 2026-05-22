@@ -1,0 +1,4 @@
+# Minimal rustfmt config. Defaults are good. We only pin the edition so a
+# toolchain bump doesn't quietly re-flow the whole tree under us.
+
+edition = "2024"
