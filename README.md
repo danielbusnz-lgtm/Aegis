@@ -2,9 +2,12 @@
   <img alt="aegis cursor" src="launcher/src/welcome/cursor.svg" width="128">
 </p>
 
-> New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
+<p align="center">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-orange?logo=rust&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-blue">
+  <img alt="Platform" src="https://img.shields.io/badge/Linux%20%7C%20Hyprland-black?logo=linux&logoColor=white">
+  <img alt="Status" src="https://img.shields.io/badge/Status-WIP-yellow">
+</p>
 
 <h1 align="center">Aegis</h1>
 
@@ -102,6 +105,10 @@ AEGIS_CARTESIA_DIRECT=1
 ```
 
 Each `_DIRECT=1` opts that provider out of the proxy. Mix and match.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).
 
 ## Acknowledgements
 
