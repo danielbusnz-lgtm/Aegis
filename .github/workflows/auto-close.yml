@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Decide and close
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const isPR = !!context.payload.pull_request;
