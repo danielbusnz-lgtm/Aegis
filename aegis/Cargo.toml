@@ -66,44 +66,66 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 name = "aegis"
 # No required-features: main.rs uses only the module-level abstractions
 # (cursor::, hotkey::, mouse::, screenshot::) so any feature combo that
-# provides those — hyprland or winit-window+crossplatform — works.
+# provides those, hyprland or winit-window+crossplatform, works.
 
-# Diagnostic / demo programs live in examples/, not src/bin/, because they
-# aren't part of the production app. Each one exercises a specific slice
-# of the pipeline (STT, classifier+find_action, cursor overlay, etc.) and
-# is run with `cargo run --example <name>`.
-[[example]]
-name = "test_hotkey"
+# Diagnostic and benchmark programs live in demos/, not src/bin/, because
+# they aren't part of the production app. Each one exercises a specific
+# slice of the pipeline (STT, classifier+find_action, cursor overlay,
+# etc.) and is run with `cargo run --bin <name>`. demo_* are hand-run
+# verifications; bench_* report latency stats across N iterations.
+[[bin]]
+name = "demo_hotkey"
+path = "demos/demo_hotkey.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_point"
+[[bin]]
+name = "demo_point"
+path = "demos/demo_point.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_stt"
+[[bin]]
+name = "demo_stt"
+path = "demos/demo_stt.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_stt_bench"
+[[bin]]
+name = "bench_stt"
+path = "demos/bench_stt.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_find_action_bench"
+[[bin]]
+name = "bench_find_action"
+path = "demos/bench_find_action.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_vision"
+[[bin]]
+name = "demo_vision"
+path = "demos/demo_vision.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_win"
+[[bin]]
+name = "demo_win"
+path = "demos/demo_win.rs"
 required-features = ["winit-window"]
 
-[[example]]
-name = "test_soundwave"
+[[bin]]
+name = "demo_soundwave"
+path = "demos/demo_soundwave.rs"
 required-features = ["hyprland"]
 
-[[example]]
-name = "test_loading"
+[[bin]]
+name = "demo_loading"
+path = "demos/demo_loading.rs"
 required-features = ["hyprland"]
+
+[[bin]]
+name = "demo_gmail"
+path = "demos/demo_gmail.rs"
+
+[[bin]]
+name = "demo_gmail_full"
+path = "demos/demo_gmail_full.rs"
+
+[[bin]]
+name = "demo_github"
+path = "demos/demo_github.rs"

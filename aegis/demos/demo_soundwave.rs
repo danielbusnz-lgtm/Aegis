@@ -6,7 +6,7 @@
 // frequencies, so they look like a live audio visualizer even though
 // nothing is actually plugged into the mic. Tune the constants and re-run.
 //
-// Run with: cargo run --bin test_soundwave --features hyprland
+// Run with: cargo run --bin demo_soundwave --features hyprland
 
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, glib};

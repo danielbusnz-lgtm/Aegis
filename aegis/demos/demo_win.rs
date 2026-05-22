@@ -5,8 +5,8 @@
 // Exercises: hotkey + mouse + screenshot + cursor (incl. click-through)
 //
 // Run with:
-//   Hyprland:  cargo run --bin test_win
-//   Windows:   cargo run --bin test_win --no-default-features \
+//   Hyprland:  cargo run --bin demo_win
+//   Windows:   cargo run --bin demo_win --no-default-features \
 //                  --features winit-window,crossplatform
 //
 // What it does:

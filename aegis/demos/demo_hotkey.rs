@@ -6,7 +6,7 @@
 //   3. is_recording() flips on press and off on release
 //   4. wait_for_press() unblocks within ~20ms of the press
 //
-// Run with `cargo run --bin test_hotkey`. Hold SUPER+space then release.
+// Run with `cargo run --bin demo_hotkey`. Hold SUPER+space then release.
 // Each turn prints when the press was detected and how long you held the key.
 // Ctrl+C to quit.
 

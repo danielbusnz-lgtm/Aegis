@@ -2,7 +2,7 @@
 
 // Isolated first-run OAuth + Gmail integration smoke test.
 //
-// Run: cargo run --bin test_gmail
+// Run: cargo run --bin demo_gmail
 //
 // First invocation opens the system browser to Google's consent page,
 // captures the loopback redirect, and writes ~/.config/aegis/gmail_token.json.

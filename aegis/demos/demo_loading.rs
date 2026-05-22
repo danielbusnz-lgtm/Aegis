@@ -5,7 +5,7 @@
 // based on its position behind a rotating "head" bar. The head sweeps around
 // once per cycle, leaving a comet-style fade trail behind it.
 //
-// Run with: cargo run --bin test_loading --features hyprland
+// Run with: cargo run --bin demo_loading --features hyprland
 
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, glib};

@@ -6,7 +6,7 @@
 // against that single message. Cleanup is "search subject:aegis-test
 // in Gmail and delete".
 //
-// Run: cargo run --bin test_gmail_full
+// Run: cargo run --bin demo_gmail_full
 
 #[path = "../src/integrations/gmail.rs"]
 mod gmail;

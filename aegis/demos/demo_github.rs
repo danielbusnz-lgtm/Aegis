@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 // Smoke test for the github integration tools.
-// Run: cargo run --bin test_github
+// Run: cargo run --bin demo_github
 
 #[path = "../src/integrations/github.rs"]
 mod github;

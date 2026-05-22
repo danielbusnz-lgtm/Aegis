@@ -2,7 +2,7 @@
 
 // Isolated test for the mic → Deepgram pipeline with full timing.
 //
-// Run with `cargo run --bin test_stt`.
+// Run with `cargo run --bin demo_stt`.
 //
 // What gets measured per turn:
 //   * Press → release hold duration
