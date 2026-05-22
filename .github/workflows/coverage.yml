@@ -1,0 +1,68 @@
+# Code coverage for the aegis crate using cargo-llvm-cov.
+#
+# Mirrors the feature set and system deps from ci.yml's test job so the
+# coverage numbers match what CI actually tests. LCOV is uploaded to
+# Codecov; once the repo is enabled there, the README badge will render.
+
+name: coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev \
+            libpipewire-0.3-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libasound2-dev \
+            libgbm-dev \
+            libegl-dev \
+            libxcb1-dev \
+            libxcb-shm0-dev \
+            libxcb-render0-dev \
+            libxcb-randr0-dev \
+            libxcb-xfixes0-dev \
+            libxrandr-dev \
+            libxss-dev \
+            pkg-config
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate LCOV coverage
+        run: |
+          cargo llvm-cov -p aegis \
+            --no-default-features \
+            --features winit-window,crossplatform \
+            --bin aegis \
+            --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          # Don't fail PR builds if Codecov is unreachable or unconfigured.
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

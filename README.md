@@ -10,6 +10,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/Linux%20%7C%20Hyprland-black?logo=linux&logoColor=white">
   <img alt="Status" src="https://img.shields.io/badge/Status-WIP-yellow">
   <img alt="CI" src="https://github.com/danielbusnz-lgtm/Aegis/actions/workflows/ci.yml/badge.svg">
+  <a href="https://codecov.io/gh/danielbusnz-lgtm/Aegis"><img alt="Coverage" src="https://codecov.io/gh/danielbusnz-lgtm/Aegis/branch/main/graph/badge.svg"></a>
 </p>
 
 <p align="center">
