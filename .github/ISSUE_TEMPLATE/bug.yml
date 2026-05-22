@@ -1,0 +1,72 @@
+name: Bug report
+description: Something is broken or behaves wrong
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening, read [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). New contributors' issues are auto-closed by default.
+
+        Keep this concise. If it does not fit on one screen, it is too long.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: One or two sentences. State the bug clearly.
+      placeholder: e.g. classifier picks Memory when I say "remember when we talked about dune"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Exact steps. Include the transcript or command you ran.
+      placeholder: |
+        1. cargo run --release --bin aegis
+        2. hold INSERT, say "remember when we talked about dune", release
+        3. classifier routes to Memory instead of Chat
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: classifier should route to Chat for reminiscence phrasings
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, window manager, aegis commit hash or version
+      placeholder: |
+        OS: Arch Linux 6.18
+        WM: Hyprland
+        aegis: c02bbf7
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: stderr output from the run. Trim to the relevant lines.
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: implement
+    attributes:
+      label: Are you willing to implement the fix yourself?
+      options:
+        - "No"
+        - "Yes, if a maintainer agrees with the approach"
+        - "Yes, I already have a fix in mind"
+    validations:
+      required: true

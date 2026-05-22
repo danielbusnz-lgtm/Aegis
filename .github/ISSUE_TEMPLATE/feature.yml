@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose a new capability or behavior change
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening, read [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). New contributors' issues are auto-closed by default.
+
+        aegis's core is minimal. Features that don't belong in the core should be extensions. PRs that bloat the core will likely be rejected.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve
+      description: Describe the user-facing pain. Don't jump to a solution yet.
+      placeholder: e.g. when I ask aegis about something from last week, it can't recall conversation history
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What you'd build. Be specific about scope.
+      placeholder: e.g. add a search_history tool that hits the existing SQLite FTS5 index when intent is Memory with temporal phrasing
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else could solve the same problem and why this one wins.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and tradeoffs
+      description: Which modules this touches, what it costs (latency, complexity, dependencies), and what could regress.
+      placeholder: |
+        Touches: providers/claude/agent_loop.rs, prompt.rs, history.rs
+        Cost: +1 tool definition in the system prompt, ~20ms FTS5 query on the hot path when triggered
+        Risk: false positives could re-route normal recall queries
+    validations:
+      required: true
+
+  - type: dropdown
+    id: implement
+    attributes:
+      label: Are you willing to implement this yourself?
+      options:
+        - "No"
+        - "Yes, if a maintainer agrees with the approach"
+        - "Yes, I already have a branch in mind"
+    validations:
+      required: true
