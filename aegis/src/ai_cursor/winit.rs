@@ -15,7 +15,9 @@ use tiny_skia::Pixmap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Fullscreen, Window, WindowAttributes, WindowId, WindowLevel};
+#[cfg(not(target_os = "macos"))]
+use winit::window::Fullscreen;
+use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
 use super::CursorState;
 use crate::painter::{DrawSkia, LoadingSpinner, Soundwave, SpriteSkia};
@@ -123,6 +125,18 @@ impl ApplicationHandler for CursorApp {
         window
             .set_cursor_hittest(false)
             .expect("set_cursor_hittest failed");
+
+        // On macOS, Fullscreen::Borderless puts the window in its own
+        // Space and forces it opaque, killing the transparency we set
+        // via with_transparent(true). Instead, size the window to fill
+        // the primary monitor without entering fullscreen mode.
+        #[cfg(target_os = "macos")]
+        if let Some(monitor) = event_loop.primary_monitor() {
+            let size = monitor.size();
+            let pos = monitor.position();
+            let _ = window.request_inner_size(size);
+            window.set_outer_position(pos);
+        }
 
         let context = Context::new(window.clone()).expect("softbuffer Context");
         let surface = Surface::new(&context, window.clone()).expect("softbuffer Surface");
@@ -326,11 +340,14 @@ pub fn cursor(initial_x: i32, initial_y: i32) -> ! {
     let initial_drawable: Box<dyn DrawSkia> =
         Box::new(SpriteSkia::from_png(CURSOR_PNG, CURSOR_DISPLAY_SIZE));
 
+    // Common attributes. On macOS we deliberately skip Fullscreen::Borderless
+    // and size the window manually in resumed(): see the comment there.
     let attrs = Window::default_attributes()
         .with_transparent(true)
         .with_decorations(false)
-        .with_window_level(WindowLevel::AlwaysOnTop)
-        .with_fullscreen(Some(Fullscreen::Borderless(None)));
+        .with_window_level(WindowLevel::AlwaysOnTop);
+    #[cfg(not(target_os = "macos"))]
+    let attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
 
     let event_loop = EventLoop::new().expect("EventLoop::new failed");
     event_loop.set_control_flow(ControlFlow::Poll);
