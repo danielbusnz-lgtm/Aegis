@@ -13,6 +13,8 @@ use tiny_skia::Pixmap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+#[cfg(not(target_os = "macos"))]
+use winit::window::WindowLevel;
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use super::CursorState;
