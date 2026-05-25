@@ -3,8 +3,8 @@
 
 #[cfg(target_os = "macos")]
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem},
     Icon, TrayIcon, TrayIconBuilder,
+    menu::{Menu, MenuEvent, MenuItem},
 };
 
 #[cfg(target_os = "macos")]

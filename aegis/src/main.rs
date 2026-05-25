@@ -1,4 +1,6 @@
-use aegis::{actions, ai_cursor, audio, hotkey, integrations, orchestrator, painter, providers, screenshot};
+use aegis::{
+    actions, ai_cursor, audio, hotkey, integrations, orchestrator, painter, providers, screenshot,
+};
 
 fn main() {
     // Shared reqwest::Client. Internal Arc means clones reuse the same

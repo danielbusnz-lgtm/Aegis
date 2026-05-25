@@ -30,7 +30,10 @@ pub fn trigger_mic_permission() {
     let config = match device.default_input_config() {
         Ok(c) => c.config(),
         Err(e) => {
-            eprintln!("[audio] failed to get input config for permission trigger: {}", e);
+            eprintln!(
+                "[audio] failed to get input config for permission trigger: {}",
+                e
+            );
             return;
         }
     };

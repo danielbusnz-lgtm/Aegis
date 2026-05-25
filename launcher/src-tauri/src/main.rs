@@ -1,8 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::process::{Command, Stdio};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+use std::process::{Command, Stdio};
 
 /// Launch the actual aegis cursor + voice agent as a child process.
 ///
@@ -102,9 +102,7 @@ fn is_onboarded() -> bool {
 /// Mark onboarding as complete.
 #[tauri::command]
 fn mark_onboarded() -> Result<(), String> {
-    let dir = dirs::config_dir()
-        .ok_or("no config dir")?
-        .join("aegis");
+    let dir = dirs::config_dir().ok_or("no config dir")?.join("aegis");
     std::fs::create_dir_all(&dir).map_err(|e| format!("{e}"))?;
     std::fs::write(dir.join("onboarded"), "").map_err(|e| format!("{e}"))?;
     Ok(())
@@ -148,7 +146,11 @@ fn main() {
     }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![spawn_aegis, save_invite_code, mark_onboarded])
+        .invoke_handler(tauri::generate_handler![
+            spawn_aegis,
+            save_invite_code,
+            mark_onboarded
+        ])
         .run(tauri::generate_context!())
         .expect("error running launcher");
 }
