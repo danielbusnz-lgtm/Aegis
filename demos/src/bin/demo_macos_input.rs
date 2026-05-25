@@ -6,8 +6,7 @@
 //! compiles cleanly with `--all-targets`.
 
 #[cfg(target_os = "macos")]
-#[path = "../src/actions.rs"]
-mod actions;
+use aegis::actions;
 
 #[cfg(not(target_os = "macos"))]
 fn main() {

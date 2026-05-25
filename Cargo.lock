@@ -71,6 +71,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis-demos"
+version = "0.1.0"
+dependencies = [
+ "aegis",
+ "base64 0.22.1",
+ "gtk4",
+ "hound",
+ "mouse_position",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "xcap",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

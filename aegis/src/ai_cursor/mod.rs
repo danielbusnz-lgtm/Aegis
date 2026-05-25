@@ -1,12 +1,17 @@
-//! Cursor overlay window. The implementation is selected at compile time
-//! by a Cargo feature so the same callers work regardless of platform.
+//! Cursor overlay window. The implementation is selected at compile time by
+//! target OS (Linux/Hyprland via GTK layer-shell, macOS/Windows via winit), so
+//! the same callers work regardless of platform.
+//!
+//! NOTE: macOS currently rides the winit path (winit window + wgpu + NSWindow
+//! tweaks in macos.rs). A native AppKit/NSPanel overlay is the intended end
+//! state but is deferred: it can only be built and tested on macOS.
 
 /// Visual state of the overlay cursor. The painter reads this to choose
 /// what to render; the orchestrator writes it as voice turns progress.
 ///
-/// `Idle` is only constructed from the hyprland feature path; the winit
-/// build path matches on it but never assigns it. The `allow(dead_code)`
-/// is for the latter so the variant stays in the public enum.
+/// `Idle` is only constructed on the Linux/Hyprland path; the winit path
+/// matches on it but never assigns it. The `allow(dead_code)` is for the
+/// latter so the variant stays in the public enum.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum CursorState {
@@ -19,28 +24,30 @@ pub enum CursorState {
     Loading,
 }
 
-// Shared types and utilities used by both winit and hyprland implementations
-#[cfg(feature = "winit-window")]
+// Shared types and utilities used by the winit overlay implementation.
+#[cfg(not(all(target_os = "linux", feature = "hyprland")))]
 mod common;
 
 // macOS-specific window configuration (only compiled on macOS)
-#[cfg(all(feature = "winit-window", target_os = "macos"))]
+#[cfg(target_os = "macos")]
 mod macos;
 
 // Platform abstraction layer for window configuration
-#[cfg(feature = "winit-window")]
+#[cfg(not(all(target_os = "linux", feature = "hyprland")))]
 mod platform;
 
 // Cross-platform renderer abstraction (softbuffer on non-macOS, wgpu on macOS)
-#[cfg(feature = "winit-window")]
+#[cfg(not(all(target_os = "linux", feature = "hyprland")))]
 mod renderer;
 
-#[cfg(feature = "hyprland")]
+// Linux/Hyprland: GTK layer-shell overlay.
+#[cfg(all(target_os = "linux", feature = "hyprland"))]
 mod hyprland;
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", feature = "hyprland"))]
 pub use hyprland::*;
 
-#[cfg(feature = "winit-window")]
+// macOS/Windows (and Linux under the dev override): winit overlay.
+#[cfg(not(all(target_os = "linux", feature = "hyprland")))]
 mod winit;
-#[cfg(feature = "winit-window")]
+#[cfg(not(all(target_os = "linux", feature = "hyprland")))]
 pub use winit::*;

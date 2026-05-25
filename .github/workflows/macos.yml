@@ -24,14 +24,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Type-check aegis (winit-window + crossplatform)
-        run: cargo check -p aegis --no-default-features --features winit-window,crossplatform --all-targets
+      - name: Type-check aegis (default = winit on macOS)
+        run: cargo check -p aegis --all-targets
 
       - name: Test aegis
-        run: cargo test -p aegis --no-default-features --features winit-window,crossplatform --bin aegis
+        run: cargo test -p aegis
 
       - name: Build aegis bin
-        run: cargo build -p aegis --no-default-features --features winit-window,crossplatform --bin aegis
+        run: cargo build -p aegis --bin aegis
 
       - uses: actions/upload-artifact@v4
         with:

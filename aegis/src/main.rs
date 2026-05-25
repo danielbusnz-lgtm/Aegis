@@ -1,18 +1,4 @@
-mod actions;
-mod ai_cursor;
-mod audio;
-mod barge_in;
-mod hotkey;
-mod integrations;
-mod intent;
-mod mouse_position;
-mod orchestrator;
-#[cfg(any(feature = "hyprland", feature = "winit-window"))]
-mod painter;
-mod providers;
-mod screenshot;
-mod tuning;
-mod voice_session;
+use aegis::{actions, ai_cursor, audio, hotkey, integrations, orchestrator, painter, providers};
 
 fn main() {
     // Shared reqwest::Client. Internal Arc means clones reuse the same
@@ -32,7 +18,6 @@ fn main() {
 
     // Wire the soundwave painter to live mic RMS so the overlay reflects
     // input level without an explicit per-frame channel.
-    #[cfg(any(feature = "hyprland", feature = "winit-window"))]
     painter::set_audio_level_source(|| {
         f32::from_bits(audio::AUDIO_LEVEL.load(std::sync::atomic::Ordering::Relaxed))
     });

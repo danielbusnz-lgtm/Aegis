@@ -22,12 +22,7 @@
 //! Recording a sample (24kHz mono, 16-bit signed little-endian):
 //!   pw-record --rate 24000 --channels 1 --format s16 aegis/fixtures/sample.wav
 
-#[path = "../src/providers/mod.rs"]
-mod providers;
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
-#[path = "../src/tuning.rs"]
-mod tuning;
+use aegis::providers;
 
 use providers::stt_deepgram::SttDeepgram;
 use std::time::{Duration, Instant};

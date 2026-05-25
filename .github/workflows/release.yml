@@ -41,6 +41,7 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
+            libjack-jackd2-dev \
             libgbm-dev \
             libegl-dev \
             libxcb1-dev \
@@ -55,11 +56,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build (release, crossplatform)
+      - name: Build (release, winit / portable path)
         run: |
           cargo build --release -p aegis \
             --no-default-features \
-            --features winit-window,crossplatform \
             --bin aegis
 
       - name: Package artifact
@@ -91,8 +91,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build (release, winit-window)
-        run: cargo build --release --no-default-features --features winit-window --bin aegis
+      - name: Build (release, default = winit on Windows)
+        run: cargo build --release -p aegis --bin aegis
 
       - name: Package artifact
         shell: pwsh
@@ -128,11 +128,9 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
 
-      - name: Build aegis (release, winit-window + crossplatform)
+      - name: Build aegis (release, default = winit on macOS)
         run: |
           cargo build --release -p aegis \
-            --no-default-features \
-            --features winit-window,crossplatform \
             --bin aegis
 
       # Tauri's build.rs in launcher/src-tauri copies the aegis binary

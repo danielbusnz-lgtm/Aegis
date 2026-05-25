@@ -37,6 +37,7 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
+            libjack-jackd2-dev \
             libgbm-dev \
             libegl-dev \
             libxcb1-dev \
@@ -54,8 +55,6 @@ jobs:
         run: |
           cargo llvm-cov -p aegis \
             --no-default-features \
-            --features winit-window,crossplatform \
-            --bin aegis \
             --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov

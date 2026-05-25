@@ -23,14 +23,7 @@
 
 #![allow(dead_code)]
 
-#[path = "../src/intent.rs"]
-mod intent;
-#[path = "../src/providers/mod.rs"]
-mod providers;
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
-#[path = "../src/tuning.rs"]
-mod tuning;
+use aegis::{intent, providers, screenshot};
 
 use providers::claude::{Claude, Intent};
 use providers::stt_deepgram::SttDeepgram;

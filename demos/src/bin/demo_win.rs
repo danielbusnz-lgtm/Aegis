@@ -21,16 +21,7 @@
 // Visual check on Windows: while holding Insert, the cursor sprite should
 // be visible AND clicks should pass through to the app underneath.
 
-#[path = "../src/ai_cursor/mod.rs"]
-mod ai_cursor;
-#[path = "../src/hotkey/mod.rs"]
-mod hotkey;
-#[path = "../src/mouse_position/mod.rs"]
-mod mouse_position;
-#[path = "../src/painter.rs"]
-mod painter;
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
+use aegis::{ai_cursor, hotkey, mouse_position, screenshot};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use std::time::Instant;

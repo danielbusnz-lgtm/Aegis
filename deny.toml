@@ -20,6 +20,29 @@ ignore = [
     # tauri -> tauri-utils -> urlpattern -> unic-ucd-ident. No upgrade is
     # available; clear when tauri drops the unic chain upstream.
     "RUSTSEC-2025-0098",
+    # gtk-rs GTK3 bindings are unmaintained (the whole atk/gdk/gdk-pixbuf/gtk
+    # batch). Pulled in transitively via global-hotkey (Linux) and the Tauri
+    # launcher; no maintained replacement exists.
+    "RUSTSEC-2024-0411",
+    "RUSTSEC-2024-0412",
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0414",
+    "RUSTSEC-2024-0415",
+    "RUSTSEC-2024-0416",
+    "RUSTSEC-2024-0417",
+    "RUSTSEC-2024-0418",
+    "RUSTSEC-2024-0419",
+    "RUSTSEC-2024-0420",
+    # Other transitive unmaintained-crate notices (proc-macro-error via deps,
+    # google-apis-rs via google-gmail1, and assorted transitive crates). All
+    # are "unmaintained" advisories, not vulnerabilities.
+    "RUSTSEC-2024-0370",
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2025-0066",
+    "RUSTSEC-2025-0075",
+    "RUSTSEC-2025-0080",
+    "RUSTSEC-2025-0081",
+    "RUSTSEC-2025-0100",
 ]
 
 [licenses]
@@ -32,16 +55,23 @@ allow = [
     "BSD-3-Clause",
     "BSL-1.0",
     "CC0-1.0",
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "MIT-0",
     "MPL-2.0",
+    "NCSA",
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "Zlib",
 ]
 confidence-threshold = 0.8
-exceptions = []
+exceptions = [
+    # hyprland-rs (Hyprland IPC) is GPL-3.0-or-later. Scoped here rather than
+    # allowing GPL graph-wide. NOTE: this makes the Linux build GPL-encumbered.
+    { crate = "hyprland", allow = ["GPL-3.0-or-later"] },
+    { crate = "hyprland-macros", allow = ["GPL-3.0-or-later"] },
+]
 
 [bans]
 multiple-versions = "warn"

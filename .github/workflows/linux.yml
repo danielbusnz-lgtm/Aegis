@@ -25,6 +25,7 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
+            libjack-jackd2-dev \
             libgbm-dev \
             libegl-dev \
             libxcb1-dev \
@@ -42,11 +43,11 @@ jobs:
 
       # Limit to the aegis package; the launcher pulls webkit2gtk and isn't
       # worth testing here. The memex tool is also out of scope.
-      - name: Type-check aegis (crossplatform feature)
-        run: cargo check -p aegis --no-default-features --features winit-window,crossplatform
+      - name: Type-check aegis (winit / portable path)
+        run: cargo check -p aegis --no-default-features
 
-      - name: Build aegis bin (crossplatform feature)
-        run: cargo build -p aegis --no-default-features --features winit-window,crossplatform --bin aegis
+      - name: Build aegis bin (winit / portable path)
+        run: cargo build -p aegis --no-default-features --bin aegis
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4

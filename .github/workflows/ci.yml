@@ -44,6 +44,7 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
+            libjack-jackd2-dev \
             libgbm-dev \
             libegl-dev \
             libxcb1-dev \
@@ -62,8 +63,10 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy -p aegis --no-default-features --features winit-window,crossplatform --all-targets -- -D warnings
+      # --no-default-features drops the `hyprland` feature, so this builds the
+      # winit + portable-crate path (no GTK4/layer-shell C libs needed in CI).
+      - name: Clippy (winit / portable path)
+        run: cargo clippy -p aegis --no-default-features --all-targets -- -D warnings
 
   build:
     name: build + test (${{ matrix.rust }})
@@ -92,6 +95,7 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libasound2-dev \
+            libjack-jackd2-dev \
             libgbm-dev \
             libegl-dev \
             libxcb1-dev \
@@ -108,7 +112,7 @@ jobs:
           key: build-${{ matrix.rust }}
 
       - name: Check
-        run: cargo check -p aegis --no-default-features --features winit-window,crossplatform
+        run: cargo check -p aegis --no-default-features
 
       - name: Test
-        run: cargo test -p aegis --no-default-features --features winit-window,crossplatform --bin aegis
+        run: cargo test -p aegis --no-default-features

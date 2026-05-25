@@ -10,8 +10,7 @@
 // Each turn prints when the press was detected and how long you held the key.
 // Ctrl+C to quit.
 
-#[path = "../src/hotkey/mod.rs"]
-mod hotkey;
+use aegis::hotkey;
 
 use std::time::Instant;
 
