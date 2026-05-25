@@ -3,8 +3,7 @@
 // Smoke test for the github integration tools.
 // Run: cargo run --bin demo_github
 
-#[path = "../src/integrations/github.rs"]
-mod github;
+use aegis::integrations::github;
 
 use serde_json::Value;
 

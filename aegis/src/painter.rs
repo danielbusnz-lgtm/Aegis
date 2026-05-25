@@ -1,16 +1,16 @@
 use std::sync::OnceLock;
 use std::time::Instant;
 
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 use gtk::cairo;
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 use gtk::prelude::*;
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 use std::cell::{Cell, RefCell};
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 use std::rc::Rc;
 
-#[cfg(feature = "winit-window")]
+#[cfg(any(not(target_os = "linux"), feature = "force-crossplatform"))]
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, PixmapPaint, Transform};
 
 /// Caller-provided function returning current mic RMS (0.0..=1.0). Registered
@@ -83,6 +83,12 @@ impl Soundwave {
     }
 }
 
+impl Default for Soundwave {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn soundwave_size() -> (f64, f64) {
     let w = N_BARS as f64 * BAR_WIDTH + (N_BARS - 1) as f64 * BAR_GAP;
     (w, MAX_HEIGHT)
@@ -127,6 +133,12 @@ impl LoadingSpinner {
     }
 }
 
+impl Default for LoadingSpinner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn spinner_size() -> (f64, f64) {
     let diameter = 2.0 * (SPINNER_INNER_RADIUS + SPINNER_BAR_LENGTH);
     (diameter, diameter)
@@ -136,7 +148,7 @@ fn spinner_size() -> (f64, f64) {
 //   Cairo / GTK backend (Hyprland)
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 mod cairo_backend {
     use super::*;
 
@@ -319,14 +331,14 @@ mod cairo_backend {
     }
 }
 
-#[cfg(feature = "hyprland")]
+#[cfg(all(target_os = "linux", not(feature = "force-crossplatform")))]
 pub use cairo_backend::{Painter, Sprite};
 
 // ═══════════════════════════════════════════════════════════════════════════
 //   tiny-skia backend (winit: Windows, macOS, X11)
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[cfg(feature = "winit-window")]
+#[cfg(any(not(target_os = "linux"), feature = "force-crossplatform"))]
 mod skia_backend {
     use super::*;
 
@@ -486,5 +498,5 @@ mod skia_backend {
     }
 }
 
-#[cfg(feature = "winit-window")]
+#[cfg(any(not(target_os = "linux"), feature = "force-crossplatform"))]
 pub use skia_backend::{DrawSkia, SpriteSkia};

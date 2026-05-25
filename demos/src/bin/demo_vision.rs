@@ -1,13 +1,6 @@
 #![allow(dead_code)]
 
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
-
-#[path = "../src/tuning.rs"]
-mod tuning;
-
-#[path = "../src/providers/mod.rs"]
-mod providers;
+use aegis::{providers, screenshot};
 
 use tokio_util::sync::CancellationToken;
 

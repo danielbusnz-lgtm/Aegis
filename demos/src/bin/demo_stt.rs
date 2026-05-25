@@ -17,16 +17,7 @@
 //   * Slow startup (first chunk delay should be ~0ms with pre-roll)
 //   * Deepgram lag (first interim should arrive 100-300ms after first chunk)
 
-#[path = "../src/audio/mod.rs"]
-mod audio;
-#[path = "../src/hotkey/mod.rs"]
-mod hotkey;
-#[path = "../src/providers/mod.rs"]
-mod providers;
-#[path = "../src/screenshot/mod.rs"]
-mod screenshot;
-#[path = "../src/tuning.rs"]
-mod tuning;
+use aegis::{audio, hotkey, providers};
 
 use providers::stt_deepgram::SttDeepgram;
 use std::sync::Arc;

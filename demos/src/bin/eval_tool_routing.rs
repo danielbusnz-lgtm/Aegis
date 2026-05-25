@@ -17,12 +17,7 @@
 
 #![allow(dead_code)]
 
-#[path = "../../src/providers/mod.rs"]
-mod providers;
-#[path = "../../src/screenshot/mod.rs"]
-mod screenshot;
-#[path = "../../src/tuning.rs"]
-mod tuning;
+use aegis::providers;
 
 use providers::claude::{Claude, Intent};
 use std::collections::BTreeMap;

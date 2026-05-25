@@ -8,8 +8,7 @@
 //
 // Run: cargo run --bin demo_gmail_full
 
-#[path = "../src/integrations/gmail.rs"]
-mod gmail;
+use aegis::integrations::gmail;
 
 use serde_json::Value;
 use std::thread::sleep;
