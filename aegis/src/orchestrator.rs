@@ -623,12 +623,15 @@ fn dispatch_action(action: crate::providers::claude::Action, early_exit: &Cancel
     match action {
         Action::Point { x: px, y: py } => {
             set_cursor_idle();
-            ai_cursor::point_at(px as i32, py as i32);
+            // Offset: +10 Y to better center on UI elements
+            ai_cursor::point_at(px as i32, (py + 10) as i32);
         }
         Action::Click { x: px, y: py } => {
             set_cursor_idle();
-            ai_cursor::point_at(px as i32, py as i32);
-            crate::actions::click_at(px, py);
+            // Offset: +10 Y to better center on UI elements
+            let adjusted_y = py + 10;
+            ai_cursor::point_at(px as i32, adjusted_y as i32);
+            crate::actions::click_at(px, adjusted_y);
         }
         Action::Type { text } => crate::actions::type_text(&text),
         Action::Key { key } => crate::actions::press_key(&key),
