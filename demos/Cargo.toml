@@ -2,6 +2,7 @@
 name = "aegis-demos"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 publish = false
 
 # Out-of-tree demo and benchmark binaries. They depend on the `aegis` library

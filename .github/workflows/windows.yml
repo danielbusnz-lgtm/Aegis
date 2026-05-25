@@ -19,14 +19,14 @@ jobs:
       # Scope to the aegis crate. The launcher (Tauri) needs an icon.ico
       # we don't have committed yet; until it does, including it here
       # breaks the windows build.
-      - name: Type-check aegis
-        run: cargo check -p aegis --all-targets --no-default-features --features winit-window
+      - name: Type-check aegis (default = winit on Windows)
+        run: cargo check -p aegis --all-targets
 
       - name: Build aegis (main bin)
-        run: cargo build --no-default-features --features winit-window --bin aegis
+        run: cargo build -p aegis --bin aegis
 
       - name: Build cross-platform demo_win
-        run: cargo build --no-default-features --features winit-window --bin demo_win
+        run: cargo build -p aegis-demos --no-default-features --features crossplatform --bin demo_win
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
