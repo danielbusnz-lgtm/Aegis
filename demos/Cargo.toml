@@ -29,10 +29,10 @@ aegis = { path = "../aegis", default-features = false }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
 tokio-util = { version = "0.7", default-features = false }
 reqwest = { version = "0.13.3", features = ["blocking", "json", "multipart", "stream", "query"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 base64 = "0.22.1"
 hound = "3.5.1"
-xcap = "0.9.4"
+xcap = "0.9.6"
 mouse_position = "0.1"
 
 # gtk is only needed by the standalone gtk demos (demo_soundwave, demo_loading),
