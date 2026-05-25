@@ -23,12 +23,9 @@ use tokio_util::sync::CancellationToken;
 /// Named so the JoinHandle signature stops tripping clippy::type_complexity.
 type ScreenshotResult = Result<(i32, i32, u32, u32, String), String>;
 
-#[cfg(feature = "hyprland")]
 fn set_cursor_idle() {
     crate::ai_cursor::set_state(crate::ai_cursor::CursorState::Idle);
 }
-#[cfg(not(feature = "hyprland"))]
-fn set_cursor_idle() {}
 
 pub fn run_loop(mic: audio::Mic, stt: SttDeepgram, claude: Claude, cartesia: TtsCartesia) {
     let session = VoiceSession::start(mic, stt, claude, cartesia);
