@@ -16,13 +16,13 @@ fn main() {
     actions::init_input_executor();
     actions::check_input_injection_available();
 
-    // Trigger screen recording permission prompt on macOS by attempting a capture.
-    // Microphone permission is already triggered by audio::Mic::init() above.
+    // Trigger screen recording and microphone permission prompts on macOS.
     // This runs early so the permission dialogs don't interrupt the voice flow.
     #[cfg(target_os = "macos")]
     {
         let _ = screenshot::capture_for_claude(0, 0, 100, 100);
         eprintln!("[startup] screen recording permission check triggered");
+        audio::trigger_mic_permission();
     }
 
     // Wire the soundwave painter to live mic RMS so the overlay reflects

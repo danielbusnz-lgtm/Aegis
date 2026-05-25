@@ -14,6 +14,47 @@ pub static AUDIO_LEVEL: AtomicU32 = AtomicU32::new(0);
 
 use crate::tuning::{AUDIO_POST_RELEASE_GRACE_MS, AUDIO_PREROLL_MS};
 
+/// Briefly open an audio input stream to trigger macOS microphone permission
+/// prompt. The stream is opened for ~100ms then dropped. Safe to call even if
+/// permission is already granted (just a no-op from the user's perspective).
+#[cfg(target_os = "macos")]
+pub fn trigger_mic_permission() {
+    let host = cpal::default_host();
+    let device = match host.default_input_device() {
+        Some(d) => d,
+        None => {
+            eprintln!("[audio] no input device for permission trigger");
+            return;
+        }
+    };
+    let config = match device.default_input_config() {
+        Ok(c) => c.config(),
+        Err(e) => {
+            eprintln!("[audio] failed to get input config for permission trigger: {}", e);
+            return;
+        }
+    };
+    let stream = device.build_input_stream(
+        &config,
+        |_data: &[f32], _: &cpal::InputCallbackInfo| {},
+        |err| eprintln!("[audio] permission trigger stream error: {}", err),
+        None,
+    );
+    match stream {
+        Ok(s) => {
+            if let Err(e) = s.play() {
+                eprintln!("[audio] permission trigger play failed: {}", e);
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+            eprintln!("[startup] microphone permission check triggered");
+        }
+        Err(e) => {
+            eprintln!("[audio] permission trigger stream build failed: {}", e);
+        }
+    }
+}
+
 /// Cold mic handle: device + cached config. Picked at startup on the main
 /// thread so device-enumeration errors surface before any hotkey is held.
 /// Convert to a `LiveMic` on the voice thread via `Mic::start()` to actually
