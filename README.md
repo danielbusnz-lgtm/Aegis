@@ -26,14 +26,14 @@
 "what's your name"             → spoken reply, no screen used
 ```
 
-Built in Rust. Linux/Hyprland natively; Windows/macOS via the `winit-window` feature.
+Built in Rust. Primary target is Linux/Hyprland; macOS and Windows build flag-free from the same `cargo run`.
 
 ## Run it
 
 ```bash
 git clone https://github.com/danielbusnz-lgtm/aegis.git
 cd aegis
-cargo run --release --bin aegis
+cargo run --release -p aegis
 ```
 
 All API calls route through a hosted Cloudflare Worker by default, so no keys needed locally to try it.
@@ -61,31 +61,30 @@ Every voice turn picks one of five paths based on what you said. Each path has a
 
 A hybrid classifier picks the path: sub-millisecond keyword match for clear cases (~80%), LLM fallback (~700ms) for ambiguous ones. Total release → action is typically ~1.2s.
 
-## Windows / macOS / X11
+## macOS / Windows
+
+Same command, no flags. The backend is picked by target OS:
 
 ```bash
-cargo run --release --bin aegis --no-default-features --features winit-window,crossplatform
+cargo run --release -p aegis
 ```
 
-## Diagnostic tools
+On Linux, build the winit/X11 path instead of Hyprland with `--no-default-features`.
 
-The `examples/` directory has standalone programs that exercise specific parts of the pipeline:
+## Demos and benchmarks
+
+Standalone binaries live in the `aegis-demos` crate, run with `cargo run -p aegis-demos --bin <name>`:
 
 ```bash
-# Record a sample first (24kHz mono 16-bit PCM):
+# record a sample first (24kHz mono 16-bit PCM)
 pw-record --rate 24000 --channels 1 --format s16 aegis/fixtures/sample.wav
 
-# STT-only benchmark (mic → Deepgram, no Claude)
-cargo run --release --example test_stt_bench -- aegis/fixtures/sample.wav "hi my name is daniel" 5
-
-# Full pipeline benchmark (WAV → STT → classifier → find_action)
-cargo run --release --example test_find_action_bench -- aegis/fixtures/find_action_sample.wav 5
-
-# Live STT timing test
-cargo run --release --example test_stt
+cargo run -p aegis-demos --bin bench_stt -- aegis/fixtures/sample.wav "hi my name is daniel" 5
+cargo run -p aegis-demos --bin bench_find_action -- aegis/fixtures/find_action_sample.wav 5
+cargo run -p aegis-demos --bin demo_stt
 ```
 
-Each example reports per-stage latency so you can see where the time goes.
+Each reports per-stage latency.
 
 ## Tunable behavior
 
