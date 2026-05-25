@@ -14,7 +14,7 @@ pub const AUDIO_PREROLL_MS: u64 = 0;
 /// How long to keep forwarding audio to Deepgram after release.
 /// ↑ more reliable last-syllable capture. adds latency.
 /// ↓ faster EOS to Deepgram. risks clipping the final word.
-pub const AUDIO_POST_RELEASE_GRACE_MS: u64 = 0;
+pub const AUDIO_POST_RELEASE_GRACE_MS: u64 = 200;
 
 // ────── STT ──────
 
@@ -22,7 +22,7 @@ pub const AUDIO_POST_RELEASE_GRACE_MS: u64 = 0;
 /// additional FINALs before returning.
 /// ↑ catches multi-segment utterances (pauses, "Hello. My name is X").
 /// ↓ faster transcript return. risks truncating split utterances.
-pub const STT_QUIESCENCE_MS: u64 = 0;
+pub const STT_QUIESCENCE_MS: u64 = 150;
 
 // ────── TTS first-flush ──────
 

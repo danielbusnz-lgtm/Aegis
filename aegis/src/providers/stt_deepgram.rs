@@ -66,16 +66,36 @@ impl SttDeepgram {
         })
     }
 
-    /// Pre-open the HTTPS connection to api.deepgram.com so the first
-    /// real STT session doesn't pay TLS handshake cost. (The WebSocket
-    /// upgrade for /v1/listen reuses the same TLS session.)
+    /// Pre-open HTTPS connections so the first real STT session doesn't
+    /// pay TCP+TLS handshake cost. Warms both api.deepgram.com and the
+    /// proxy auth endpoint (if using proxy mode). In proxy mode we do a
+    /// real auth call (with device_id) to fully warm the path; the token
+    /// is discarded since it's short-lived.
     pub async fn warm(&self) {
-        let _ = self
+        // Warm Deepgram API connection
+        let dg = self
             .http
             .get("https://api.deepgram.com/v1/projects")
             .header("Authorization", "Token warm")
-            .send()
-            .await;
+            .send();
+
+        // In proxy mode, do a real auth call to fully warm the path
+        match &self.mode {
+            SttMode::Proxy {
+                token_url,
+                device_id,
+            } => {
+                let mut req = self.http.post(token_url).header("x-aegis-device-id", device_id);
+                if let Some(code) = super::invite_code::load() {
+                    req = req.header("x-aegis-invite-code", code);
+                }
+                let proxy = req.send();
+                let _ = tokio::join!(dg, proxy);
+            }
+            SttMode::Direct { .. } => {
+                let _ = dg.await;
+            }
+        }
     }
 
     /// Build the `Authorization` header value for the Deepgram WebSocket.

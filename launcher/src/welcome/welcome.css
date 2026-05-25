@@ -77,3 +77,26 @@
   pointer-events: none;
   animation: breathing-cursor 5s ease-in-out infinite;
 }
+
+#invite {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#invite-code {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 13px;
+  width: 180px;
+  text-align: center;
+  outline: none;
+}
+
+#invite-code::placeholder {
+  color: rgba(255,255,255,0.4);
+}
