@@ -1,7 +1,12 @@
+use std::sync::Once;
+
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use image::codecs::jpeg::JpegEncoder;
 
 use super::backend::ScreenshotBackend;
+
+/// Logs the monitor geometry diagnostic at most once per process.
+static GEOMETRY_DIAG: Once = Once::new();
 
 /// Cross-platform backend (Windows, macOS, X11) via the `xcap` crate.
 /// Zero-sized; never instantiated.
@@ -17,12 +22,37 @@ impl ScreenshotBackend for Backend {
             .into_iter()
             .find(|m| m.is_primary().unwrap_or(false))
             .ok_or("no primary monitor")?;
-        Ok((
+        let geo = (
             monitor.x()?,
             monitor.y()?,
             monitor.width()?,
             monitor.height()?,
-        ))
+        );
+
+        // DIAGNOSTIC (once per process): find_action maps Claude's coordinates
+        // into these w/h units, then clicks via CGEvent, which uses logical
+        // points on macOS. So these must be logical. If `w`/`h` come back as the
+        // physical (Retina-doubled) resolution, find_action clicks land ~2x off
+        // and the mapping needs dividing by scale_factor. On a Retina Mac: if w
+        // ≈ your logical width it's correct; if ≈ 2x it's physical.
+        GEOMETRY_DIAG.call_once(|| {
+            let sf = monitor.scale_factor().unwrap_or(1.0);
+            let (_, _, w, h) = geo;
+            eprintln!(
+                "[diag:geometry] xcap primary monitor: pos=({}, {}) size={}x{} \
+                 scale_factor={:.2} → physical would be {}x{}. \
+                 Clicks use logical points; size above must be logical.",
+                geo.0,
+                geo.1,
+                w,
+                h,
+                sf,
+                (w as f32 * sf) as u32,
+                (h as f32 * sf) as u32,
+            );
+        });
+
+        Ok(geo)
     }
 
     fn capture_resized_for_claude(
