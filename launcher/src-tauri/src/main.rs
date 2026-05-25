@@ -1,14 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::process::Command;
-
-/// Platform-specific onboarding URL. Each OS has its own HTML page with the
-/// right hotkey instructions. macOS uses Ctrl+Space; everyone else uses the
-/// Insert key (matches the Hyprland config).
-#[cfg(target_os = "macos")]
-const ONBOARDING_URL: &str = "onboarding/macos.html";
-#[cfg(not(target_os = "macos"))]
-const ONBOARDING_URL: &str = "onboarding/index.html";
+use std::process::{Command, Stdio};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 /// Launch the actual aegis cursor + voice agent as a child process.
 ///
@@ -54,7 +48,14 @@ fn spawn_aegis() -> Result<(), String> {
 
     for path in &candidates {
         if path.exists() {
-            if let Ok(_child) = Command::new(path).spawn() {
+            eprintln!("[launcher] spawning aegis from: {}", path.display());
+            let mut cmd = Command::new(path);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
+            #[cfg(unix)]
+            cmd.process_group(0);
+            if let Ok(_child) = cmd.spawn() {
                 return Ok(());
             }
         }
@@ -122,26 +123,6 @@ fn main() {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![spawn_aegis, save_invite_code])
-        .setup(|app| {
-            // Onboarding window is created here (not in tauri.conf.json) so
-            // we can pick the URL at compile time per target OS. welcome.js
-            // finds it later via `WebviewWindow.getByLabel("onboarding")`.
-            tauri::WebviewWindowBuilder::new(
-                app,
-                "onboarding",
-                tauri::WebviewUrl::App(ONBOARDING_URL.into()),
-            )
-            .title("Aegis")
-            .inner_size(700.0, 350.0)
-            .resizable(false)
-            .decorations(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .visible(false)
-            .focused(false)
-            .build()?;
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error running launcher");
 }
