@@ -15,7 +15,7 @@
         "url": "welcome/index.html",
         "title": "Aegis",
         "width": 600,
-        "height": 440,
+        "height": 620,
         "resizable": false,
         "fullscreen": false,
         "decorations": false,
