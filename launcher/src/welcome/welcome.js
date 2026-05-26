@@ -1,5 +1,6 @@
-// Welcome window. Spawns the aegis cursor + voice agent in the background,
-// saves any invite code, and closes.
+// Onboarding screen. Enrolls the user with an invite code or their own
+// provider keys, gates "start" until one of those checks out, shows the
+// push-to-talk hotkey, then spawns the aegis agent and closes.
 
 // TODO: Pop sound disabled - not working on macOS (see GitHub issue)
 // const popSound = new Audio("pop.mp3");
@@ -97,7 +98,7 @@ for (const field of Object.values(byokFields)) {
             }
         }
     } catch (_) {
-        // No Tauri (e.g. opened in a plain browser) — leave defaults.
+        // No Tauri (e.g. opened in a plain browser); leave defaults.
     }
 })();
 
@@ -217,14 +218,14 @@ document.getElementById("cursor-button").addEventListener("click", async () => {
 document.getElementById("howto-done").addEventListener("click", async () => {
     const { invoke } = window.__TAURI__.core;
 
-    // Mark onboarding complete so next launch skips this screen
-    await invoke("mark_onboarded").catch(() => {});
+    // Mark onboarding complete so the next launch skips this screen.
+    await invoke("mark_onboarded").catch(() => { });
 
-    // Spawn aegis
+    // Fire-and-forget: the agent runs as its own process, so don't block the
+    // window close on it booting.
     invoke("spawn_aegis").catch((err) =>
         console.error("[welcome] spawn aegis failed:", err),
     );
 
-    // Close the welcome window
     window.__TAURI__.window.getCurrentWindow().close();
 });

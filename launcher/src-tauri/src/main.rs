@@ -22,9 +22,7 @@ fn spawn_aegis() -> Result<(), String> {
 
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    // Sibling-of-launcher: works for shipped bundles where Tauri's
-    // externalBin places the aegis sidecar in the same dir as the
-    // launcher's own executable.
+    // 1. Sibling of the launcher exe (the shipped-bundle sidecar).
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             candidates.push(dir.join("aegis"));
@@ -33,8 +31,7 @@ fn spawn_aegis() -> Result<(), String> {
         }
     }
 
-    // Dev paths: when running via cargo tauri dev or directly from
-    // the workspace.
+    // 2/3. Workspace dev layout.
     candidates.extend(
         [
             "../../target/debug/aegis",
@@ -302,14 +299,12 @@ async fn check_cartesia(client: &reqwest::Client, key: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if user has completed onboarding.
 fn is_onboarded() -> bool {
     dirs::config_dir()
         .map(|d| d.join("aegis").join("onboarded").exists())
         .unwrap_or(false)
 }
 
-/// Mark onboarding as complete.
 #[tauri::command]
 fn mark_onboarded() -> Result<(), String> {
     let dir = dirs::config_dir().ok_or("no config dir")?.join("aegis");

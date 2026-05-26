@@ -1,7 +1,7 @@
 // Auto-fit the Tauri window to the sign-in card. Reads the card's rendered
 // box once Tailwind has applied its classes, then resizes the OS window to
 // match plus a small margin. Means we never have to hardcode pixel numbers
-// in tauri.conf.json — tweak the card and the window follows.
+// in tauri.conf.json: tweak the card and the window follows.
 const MARGIN = 16;
 
 async function fitWindowToCard() {
