@@ -283,10 +283,7 @@ mod tests {
         (0, 0, 1280, 800)
     }
 
-    fn parse(
-        tool: &str,
-        input: serde_json::Value,
-    ) -> Option<Action> {
+    fn parse(tool: &str, input: serde_json::Value) -> Option<Action> {
         let (wx, wy, ww, wh) = unit_window();
         parse_tool_call(tool, &input, 1280, 800, wx, wy, ww, wh)
     }
@@ -361,7 +358,12 @@ mod tests {
 
     #[test]
     fn right_middle_double_triple_click_mapped_to_click() {
-        for action_name in &["right_click", "middle_click", "double_click", "triple_click"] {
+        for action_name in &[
+            "right_click",
+            "middle_click",
+            "double_click",
+            "triple_click",
+        ] {
             let action = parse(
                 "computer",
                 serde_json::json!({ "action": action_name, "coordinate": [50, 50] }),
@@ -389,10 +391,7 @@ mod tests {
 
     #[test]
     fn mouse_move_as_tool_name_fallback() {
-        let action = parse(
-            "mouse_move",
-            serde_json::json!({ "coordinate": [10, 20] }),
-        );
+        let action = parse("mouse_move", serde_json::json!({ "coordinate": [10, 20] }));
         assert!(matches!(action, Some(Action::Point { x: 10, y: 20 })));
     }
 
@@ -434,10 +433,7 @@ mod tests {
 
     #[test]
     fn missing_coordinate_returns_none() {
-        let action = parse(
-            "computer",
-            serde_json::json!({ "action": "left_click" }),
-        );
+        let action = parse("computer", serde_json::json!({ "action": "left_click" }));
         assert!(action.is_none());
     }
 
@@ -449,8 +445,12 @@ mod tests {
         let action = parse_tool_call(
             "computer",
             &serde_json::json!({ "action": "left_click", "coordinate": [9999, 9999] }),
-            1280, 800,
-            0, 0, 1280, 800,
+            1280,
+            800,
+            0,
+            0,
+            1280,
+            800,
         );
         match action {
             Some(Action::Click { x, y }) => {
@@ -479,8 +479,12 @@ mod tests {
         let action = parse_tool_call(
             "computer",
             &serde_json::json!({ "action": "left_click", "coordinate": [0, 0] }),
-            1280, 800,
-            100, 50, 1280, 800,
+            1280,
+            800,
+            100,
+            50,
+            1280,
+            800,
         );
         assert!(matches!(action, Some(Action::Click { x: 100, y: 50 })));
     }
@@ -592,11 +596,11 @@ mod tests {
 
     #[test]
     fn unknown_computer_action_returns_none() {
-        let action = parse(
-            "computer",
-            serde_json::json!({ "action": "screenshot" }),
+        let action = parse("computer", serde_json::json!({ "action": "screenshot" }));
+        assert!(
+            action.is_none(),
+            "screenshot action should not produce an Action"
         );
-        assert!(action.is_none(), "screenshot action should not produce an Action");
     }
 
     #[test]
@@ -661,10 +665,7 @@ mod tests {
     #[test]
     fn unknown_tool_name_returns_integration() {
         // Any name not in the built-in list routes to Action::Integration.
-        let action = parse(
-            "spotify_play",
-            serde_json::json!({ "track": "Despacito" }),
-        );
+        let action = parse("spotify_play", serde_json::json!({ "track": "Despacito" }));
         assert!(matches!(action, Some(Action::Integration)));
     }
 
@@ -721,14 +722,16 @@ mod tests {
             }
         }
         assert_eq!(remaining_images, 2, "2 most recent images should survive");
-        assert_eq!(placeholders, 3, "3 older images should become placeholder text");
+        assert_eq!(
+            placeholders, 3,
+            "3 older images should become placeholder text"
+        );
     }
 
     #[test]
     fn trim_keeps_last_n_tool_result_images() {
         // 4 tool_result messages each carrying an image.
-        let mut msgs: Vec<serde_json::Value> =
-            (0..4).map(|_| make_tool_result_msg(true)).collect();
+        let mut msgs: Vec<serde_json::Value> = (0..4).map(|_| make_tool_result_msg(true)).collect();
         trim_old_screenshots(&mut msgs, 1);
 
         let mut remaining = 0usize;
@@ -776,7 +779,10 @@ mod tests {
             "content": [{ "type": "image", "source": {} }]
         })];
         trim_old_screenshots(&mut msgs, 0);
-        assert_eq!(msgs[0]["content"][0]["type"], "image", "assistant image must not be touched");
+        assert_eq!(
+            msgs[0]["content"][0]["type"], "image",
+            "assistant image must not be touched"
+        );
     }
 
     #[test]
@@ -801,6 +807,9 @@ mod tests {
         trim_old_screenshots(&mut msgs, 0);
         let content = msgs[0]["content"].as_array().unwrap();
         assert_eq!(content[0]["type"], "text", "text block should be untouched");
-        assert_ne!(content[1]["type"], "image", "image should have been replaced");
+        assert_ne!(
+            content[1]["type"], "image",
+            "image should have been replaced"
+        );
     }
 }

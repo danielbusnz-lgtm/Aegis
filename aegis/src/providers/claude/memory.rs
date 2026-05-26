@@ -380,11 +380,8 @@ mod tests {
     use super::*;
 
     fn tmp_path(label: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!(
-            "aegis-mem-{}-{}.jsonl",
-            label,
-            std::process::id()
-        ));
+        let p =
+            std::env::temp_dir().join(format!("aegis-mem-{}-{}.jsonl", label, std::process::id()));
         let _ = std::fs::remove_file(&p);
         p
     }
@@ -430,9 +427,15 @@ mod tests {
         // Ensure it really doesn't exist.
         assert!(!tmp.exists());
         let store = MemoryStore::open(tmp.clone()).expect("open");
-        assert!(store.as_prompt_block().is_none(), "missing file => empty store");
+        assert!(
+            store.as_prompt_block().is_none(),
+            "missing file => empty store"
+        );
         // No file should have been created just by opening.
-        assert!(!tmp.exists(), "open() should not create the file before a write");
+        assert!(
+            !tmp.exists(),
+            "open() should not create the file before a write"
+        );
     }
 
     #[test]
@@ -451,7 +454,10 @@ mod tests {
         let store = MemoryStore::open(tmp.clone()).expect("open");
         let prompt = store.as_prompt_block().unwrap();
         assert!(prompt.contains("good: ok"), "valid line should load");
-        assert!(prompt.contains("second: yes"), "second valid line should load");
+        assert!(
+            prompt.contains("second: yes"),
+            "second valid line should load"
+        );
         // The corrupt lines must not have caused a panic or truncated the load.
         let _ = std::fs::remove_file(&tmp);
     }
@@ -476,7 +482,10 @@ mod tests {
         let store = MemoryStore::open(tmp.clone()).expect("open");
         store.store_fact("  city  ", "  Boston  ").unwrap();
         let prompt = store.as_prompt_block().unwrap();
-        assert!(prompt.contains("city: Boston"), "leading/trailing whitespace must be stripped");
+        assert!(
+            prompt.contains("city: Boston"),
+            "leading/trailing whitespace must be stripped"
+        );
         let _ = std::fs::remove_file(&tmp);
     }
 
@@ -496,7 +505,10 @@ mod tests {
         let store = MemoryStore::open(tmp.clone()).expect("open");
         let prompt = store.as_prompt_block().unwrap();
         assert!(prompt.contains("color: blue"), "latest entry should win");
-        assert!(!prompt.contains("color: red"), "earlier entry should be shadowed");
+        assert!(
+            !prompt.contains("color: red"),
+            "earlier entry should be shadowed"
+        );
         let _ = std::fs::remove_file(&tmp);
     }
 
@@ -509,8 +521,14 @@ mod tests {
         store.store_fact("pet", "cat").unwrap();
         store.store_fact("pet", "dog").unwrap();
         let prompt = store.as_prompt_block().unwrap();
-        assert!(prompt.contains("pet: dog"), "in-memory view must reflect the latest write");
-        assert!(!prompt.contains("pet: cat"), "old in-memory value must be replaced");
+        assert!(
+            prompt.contains("pet: dog"),
+            "in-memory view must reflect the latest write"
+        );
+        assert!(
+            !prompt.contains("pet: cat"),
+            "old in-memory value must be replaced"
+        );
         let _ = std::fs::remove_file(&tmp);
     }
 
@@ -521,7 +539,10 @@ mod tests {
         store.store_fact("color", "green").unwrap();
         let prompt = store.as_prompt_block().unwrap();
         // Each line must be "- key: value\n"
-        assert!(prompt.starts_with("- "), "prompt block should start with a bullet");
+        assert!(
+            prompt.starts_with("- "),
+            "prompt block should start with a bullet"
+        );
         assert!(prompt.contains("- color: green\n"));
         let _ = std::fs::remove_file(&tmp);
     }

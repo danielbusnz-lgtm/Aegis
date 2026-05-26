@@ -334,7 +334,10 @@ mod tests {
         assert_eq!(keyword_classify("next song"), Some(Intent::Integration));
         assert_eq!(keyword_classify("next track"), Some(Intent::Integration));
         assert_eq!(keyword_classify("previous song"), Some(Intent::Integration));
-        assert_eq!(keyword_classify("previous track"), Some(Intent::Integration));
+        assert_eq!(
+            keyword_classify("previous track"),
+            Some(Intent::Integration)
+        );
     }
 
     #[test]
@@ -356,10 +359,7 @@ mod tests {
             keyword_classify("what are my pull requests"),
             Some(Intent::Integration)
         );
-        assert_eq!(
-            keyword_classify("list my repos"),
-            Some(Intent::Integration)
-        );
+        assert_eq!(keyword_classify("list my repos"), Some(Intent::Integration));
     }
 
     #[test]
@@ -376,10 +376,7 @@ mod tests {
             keyword_classify("click on the button"),
             Some(Intent::FindAction)
         );
-        assert_eq!(
-            keyword_classify("open the menu"),
-            Some(Intent::FindAction)
-        );
+        assert_eq!(keyword_classify("open the menu"), Some(Intent::FindAction));
         assert_eq!(
             keyword_classify("focus the search bar"),
             // "the search bar" is a UI ref → FindAction
