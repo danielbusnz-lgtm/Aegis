@@ -1,6 +1,13 @@
-# Builds release binaries for Linux and Windows when a `v*.*.*` tag is
-# pushed, then drafts a GitHub Release with the artifacts attached.
-# Mirrors the system deps and feature flags from linux.yml / windows.yml.
+# Builds release artifacts for Linux, Windows, and macOS when a `v*.*.*`
+# tag is pushed, then drafts a GitHub Release with them attached. Mirrors
+# the system deps and feature flags from linux.yml / windows.yml.
+#
+# macOS signing + notarization is gated on the APPLE_* repo secrets. With
+# them unset the .dmg builds unsigned (recipient right-clicks → Open to get
+# past Gatekeeper); set them to ship a signed, notarized .dmg that opens
+# with no prompt. Required secrets: APPLE_CERTIFICATE (base64 of the
+# Developer ID Application .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_ID,
+# APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID.
 #
 # Drafts are intentional: the maintainer reviews the auto-generated notes
 # before publishing. To rebuild an existing tag, use workflow_dispatch.
@@ -133,23 +140,75 @@ jobs:
           cargo build --release -p aegis \
             --bin aegis
 
+      # Code signing is fully optional: with no APPLE_CERTIFICATE secret the
+      # next steps are skipped and the .dmg builds unsigned, same as before.
+      - name: Detect Apple signing secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "DO_SIGN=true" >> "$GITHUB_ENV"
+          else
+            echo "DO_SIGN=false" >> "$GITHUB_ENV"
+            echo "No APPLE_CERTIFICATE secret set; building unsigned."
+          fi
+
+      # Import the Developer ID cert into a throwaway keychain and expose the
+      # signing identity to the build step. Keychain password is generated
+      # here, not a secret. Mirrors Tauri's documented CI signing recipe.
+      - name: Import Developer ID certificate
+        if: env.DO_SIGN == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain >/dev/null
+          rm -f certificate.p12
+          # Distribution outside the App Store needs the "Developer ID
+          # Application" identity (not "Apple Development"), so it notarizes.
+          CERT_ID=$(security find-identity -v -p codesigning build.keychain \
+            | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          if [ -z "$CERT_ID" ]; then
+            echo "::error::No 'Developer ID Application' identity in the imported certificate."
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+          echo "Signing identity: $CERT_ID"
+
       # Tauri's build.rs in launcher/src-tauri copies the aegis binary
       # with the right target-triple suffix, then `cargo tauri build`
       # bundles it as a sidecar inside Aegis Settings.app and produces
-      # a .dmg installer.
+      # a .dmg installer. When APPLE_SIGNING_IDENTITY is set, Tauri signs
+      # the bundle; when the APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID trio is
+      # also present, it notarizes and staples. All empty = unsigned build.
       - name: Build launcher .app + .dmg
         working-directory: launcher
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: cargo tauri build
 
       - name: Package artifact
         run: |
           mkdir -p dist
-          # Filename includes version + arch and varies as we bump version,
-          # so glob rather than hardcode.
-          DMG=$(find launcher/src-tauri/target/release/bundle/dmg -name '*.dmg' | head -1)
+          # Cargo workspace: the bundle lands in the workspace-root target dir
+          # (target/release/bundle), not under launcher/src-tauri. Filename
+          # includes version + arch and varies, so glob rather than hardcode.
+          DMG=$(find target/release/bundle -name '*.dmg' | head -1)
           if [ -z "$DMG" ]; then
             echo "no .dmg produced; bundle output:"
-            find launcher/src-tauri/target/release/bundle -type f | head -50
+            find target/release/bundle -type f | head -50
             exit 1
           fi
           cp "$DMG" dist/aegis-macos-aarch64.dmg
