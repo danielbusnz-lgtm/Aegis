@@ -58,12 +58,7 @@
       "binaries/aegis"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.13",
-      "infoPlist": {
-        "LSUIElement": true,
-        "NSMicrophoneUsageDescription": "Aegis needs microphone access for voice commands",
-        "NSScreenCaptureUsageDescription": "Aegis needs screen recording to see what you are working on"
-      }
+      "minimumSystemVersion": "10.13"
     }
   }
 }
