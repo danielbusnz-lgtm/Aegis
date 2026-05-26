@@ -3,3 +3,4 @@
 launcher/src-tauri/gen/
 *.wav
 aegis/evals/results/
+node_modules/
