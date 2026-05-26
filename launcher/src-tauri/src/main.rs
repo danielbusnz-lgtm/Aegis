@@ -53,6 +53,7 @@ fn spawn_aegis() -> Result<(), String> {
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
+            apply_byok_env(&mut cmd);
             #[cfg(unix)]
             cmd.process_group(0);
             if let Ok(_child) = cmd.spawn() {
@@ -70,6 +71,67 @@ fn spawn_aegis() -> Result<(), String> {
         "aegis binary not found. Tried: {tried}. Build it with \
          `cargo build --release -p aegis --no-default-features --features winit-window,crossplatform` first."
     ))
+}
+
+/// OS keychain service the launcher stores the user's own provider keys
+/// under. Each provider is a separate account.
+const KEYRING_SERVICE: &str = "com.aegis.settings";
+
+/// (keychain account, aegis "go direct" flag, provider key env var) per
+/// provider. The aegis runtime already switches a provider to direct mode
+/// when its DIRECT flag is present, reading the key from the matching var.
+const BYOK_PROVIDERS: [(&str, &str, &str); 3] = [
+    ("anthropic", "AEGIS_ANTHROPIC_DIRECT", "ANTHROPIC_API_KEY"),
+    ("deepgram", "AEGIS_DEEPGRAM_DIRECT", "DEEPGRAM_API_KEY"),
+    ("cartesia", "AEGIS_CARTESIA_DIRECT", "CARTESIA_API_KEY"),
+];
+
+fn keychain_get(account: &str) -> Option<String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, account).ok()?;
+    match entry.get_password() {
+        Ok(p) if !p.trim().is_empty() => Some(p),
+        _ => None,
+    }
+}
+
+/// Inject any stored BYOK keys into the aegis child using the env contract
+/// its providers already understand. Providers with no stored key are left
+/// on the proxy/trial path, so direct + trial can mix per provider.
+fn apply_byok_env(cmd: &mut Command) {
+    for (account, direct_flag, key_var) in BYOK_PROVIDERS {
+        if let Some(key) = keychain_get(account) {
+            cmd.env(direct_flag, "1").env(key_var, key);
+        }
+    }
+}
+
+/// Persist the user's own provider keys to the OS keychain. A blank value
+/// is skipped, not cleared: the UI pre-fills a "saved" hint for providers
+/// that already have a key, so submitting the form blank must keep them.
+#[tauri::command]
+fn save_api_keys(anthropic: String, deepgram: String, cartesia: String) -> Result<(), String> {
+    let values = [anthropic, deepgram, cartesia];
+    for ((account, _, _), value) in BYOK_PROVIDERS.iter().zip(values.iter()) {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let entry = keyring::Entry::new(KEYRING_SERVICE, account).map_err(|e| e.to_string())?;
+        entry
+            .set_password(trimmed)
+            .map_err(|e| format!("save {account}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Which providers currently have a stored key. Booleans only, never the
+/// secret values, so the UI can show "saved" state without exposing keys.
+#[tauri::command]
+fn api_keys_status() -> std::collections::HashMap<String, bool> {
+    BYOK_PROVIDERS
+        .iter()
+        .map(|(account, _, _)| (account.to_string(), keychain_get(account).is_some()))
+        .collect()
 }
 
 /// Local format check. Mirrors the proxy's CODE_RE so we fail on obvious
@@ -211,7 +273,9 @@ fn main() {
             spawn_aegis,
             save_invite_code,
             mark_onboarded,
-            verify_invite_code
+            verify_invite_code,
+            save_api_keys,
+            api_keys_status
         ])
         .run(tauri::generate_context!())
         .expect("error running launcher");

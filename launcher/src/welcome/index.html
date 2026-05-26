@@ -16,9 +16,18 @@
       <button id="cursor-button" aria-label="Start Aegis">
         <img src="cursor.svg" alt="" />
       </button>
-      <div id="invite">
-        <input type="text" id="invite-code" placeholder="Invite code (optional)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-        <span id="invite-status" aria-hidden="true"></span>
+      <div id="enroll">
+        <div id="invite">
+          <input type="text" id="invite-code" placeholder="Invite code (optional)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <span id="invite-status" aria-hidden="true"></span>
+        </div>
+        <div id="byok">
+          <input type="password" id="key-anthropic" placeholder="Anthropic API key" autocomplete="off" spellcheck="false" />
+          <input type="password" id="key-deepgram" placeholder="Deepgram API key" autocomplete="off" spellcheck="false" />
+          <input type="password" id="key-cartesia" placeholder="Cartesia API key" autocomplete="off" spellcheck="false" />
+        </div>
+        <button type="button" id="byok-toggle" class="link-btn">Use your own API keys</button>
+        <button type="button" id="byok-back" class="link-btn">Use an invite code instead</button>
       </div>
       <div id="howto">
         <p class="howto-title">You're all set</p>

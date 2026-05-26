@@ -44,6 +44,38 @@ codeInput.addEventListener("keydown", async (e) => {
     }
 });
 
+// Bring-your-own-keys: swap the invite field for the provider key fields,
+// and reflect which keys are already stored so a blank submit keeps them.
+const byokFields = {
+    anthropic: document.getElementById("key-anthropic"),
+    deepgram: document.getElementById("key-deepgram"),
+    cartesia: document.getElementById("key-cartesia"),
+};
+const byokLabels = { anthropic: "Anthropic", deepgram: "Deepgram", cartesia: "Cartesia" };
+
+document.getElementById("byok-toggle").addEventListener("click", () => {
+    document.querySelector(".window").classList.add("show-byok");
+    byokFields.anthropic.focus();
+});
+document.getElementById("byok-back").addEventListener("click", () => {
+    document.querySelector(".window").classList.remove("show-byok");
+});
+
+// Mark already-saved providers so the user knows a blank field is kept.
+(async () => {
+    try {
+        const status = await window.__TAURI__.core.invoke("api_keys_status");
+        for (const [name, field] of Object.entries(byokFields)) {
+            if (status[name]) {
+                field.classList.add("saved");
+                field.placeholder = `${byokLabels[name]} key saved · leave blank to keep`;
+            }
+        }
+    } catch (_) {
+        // No Tauri (e.g. opened in a plain browser) — leave defaults.
+    }
+})();
+
 // Swap the welcome view for the "how to use it" card, filling in the
 // platform's push-to-talk chord. macOS uses Ctrl+Space (the cross-platform
 // winit hotkey); other platforms read the same.
@@ -67,6 +99,18 @@ document.getElementById("cursor-button").addEventListener("click", async () => {
             await invoke("save_invite_code", { code });
         } catch (err) {
             console.error("[welcome] save invite code failed:", err);
+        }
+    }
+
+    // Persist any entered provider keys (blank fields are kept as-is).
+    const anthropic = byokFields.anthropic.value.trim();
+    const deepgram = byokFields.deepgram.value.trim();
+    const cartesia = byokFields.cartesia.value.trim();
+    if (anthropic || deepgram || cartesia) {
+        try {
+            await invoke("save_api_keys", { anthropic, deepgram, cartesia });
+        } catch (err) {
+            console.error("[welcome] save api keys failed:", err);
         }
     }
 

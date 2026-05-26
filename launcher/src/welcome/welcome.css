@@ -76,11 +76,79 @@
   animation: breathing-cursor 5s ease-in-out infinite;
 }
 
-#invite {
+/* Bottom enrollment block: invite code by default, swaps to the BYOK key
+   fields when .window has .show-byok. */
+#enroll {
   position: absolute;
-  bottom: 32px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+#invite {
+  position: relative; /* anchor for #invite-status */
+}
+
+#byok {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#byok input {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 7px 12px;
+  color: #fff;
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+}
+
+#byok input::placeholder {
+  color: rgba(255,255,255,0.4);
+}
+
+#byok input.saved::placeholder {
+  color: rgba(63,185,80,0.7);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  color: rgba(255,255,255,0.45);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-btn:hover {
+  color: rgba(255,255,255,0.75);
+}
+
+/* Toggle between the two enrollment modes. */
+#byok-back {
+  display: none;
+}
+
+.window.show-byok #invite,
+.window.show-byok #byok-toggle {
+  display: none;
+}
+
+.window.show-byok #byok {
+  display: flex;
+}
+
+.window.show-byok #byok-back {
+  display: block;
 }
 
 #invite-code {
@@ -161,7 +229,7 @@
 
 .window.show-howto #outer-halo,
 .window.show-howto #cursor-button,
-.window.show-howto #invite {
+.window.show-howto #enroll {
   display: none;
 }
 
