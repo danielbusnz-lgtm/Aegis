@@ -61,6 +61,8 @@
   appearance: none;
   -webkit-appearance: none;
   outline: none;
+  user-select: none;
+  -webkit-user-select: none;
   transition: transform 150ms ease-out;
 }
 
@@ -73,6 +75,9 @@
   height: 100%;
   display: block;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
   animation: breathing-cursor 5s ease-in-out infinite;
 }
 
