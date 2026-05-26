@@ -739,18 +739,18 @@ mod tests {
         for msg in &msgs {
             if let Some(content) = msg["content"].as_array() {
                 for block in content {
-                    if block["type"] == "tool_result" {
-                        if let Some(inner) = block["content"].as_array() {
-                            for item in inner {
-                                if item["type"] == "image" {
-                                    remaining += 1;
-                                }
-                                if item["type"] == "text"
-                                    && item["text"] == "[older screenshot omitted]"
-                                {
-                                    placeholders += 1;
-                                }
-                            }
+                    if block["type"] != "tool_result" {
+                        continue;
+                    }
+                    let Some(inner) = block["content"].as_array() else {
+                        continue;
+                    };
+                    for item in inner {
+                        if item["type"] == "image" {
+                            remaining += 1;
+                        }
+                        if item["type"] == "text" && item["text"] == "[older screenshot omitted]" {
+                            placeholders += 1;
                         }
                     }
                 }
