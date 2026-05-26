@@ -242,9 +242,18 @@ async fn verify_api_keys(
 
     let client = reqwest::Client::new();
     let mut out = std::collections::HashMap::new();
-    out.insert("anthropic".to_string(), check_anthropic(&client, &anthropic).await);
-    out.insert("deepgram".to_string(), check_deepgram(&client, &deepgram).await);
-    out.insert("cartesia".to_string(), check_cartesia(&client, &cartesia).await);
+    out.insert(
+        "anthropic".to_string(),
+        check_anthropic(&client, &anthropic).await,
+    );
+    out.insert(
+        "deepgram".to_string(),
+        check_deepgram(&client, &deepgram).await,
+    );
+    out.insert(
+        "cartesia".to_string(),
+        check_cartesia(&client, &cartesia).await,
+    );
     out
 }
 
