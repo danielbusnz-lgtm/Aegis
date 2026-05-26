@@ -1,11 +1,12 @@
 # Fast feedback on every push to main and every PR.
 #
-# Two jobs:
-#   - lint:  rustfmt + clippy on stable. Required gate.
-#   - build: type-check + test across a Rust matrix (stable, beta, MSRV).
-#            Only the stable cell gates merging; beta and MSRV are
-#            advisory so future toolchain regressions surface early
-#            without blocking work.
+# Jobs:
+#   - lint:        rustfmt + clippy on stable. Required gate.
+#   - build:       type-check + test across a Rust matrix (stable, beta, MSRV).
+#                  Only the stable cell gates merging; beta and MSRV are
+#                  advisory so future toolchain regressions surface early
+#                  without blocking work.
+#   - launcher-js: vitest suite for the onboarding screen (welcome.js).
 #
 # Companion workflows:
 #   - linux.yml builds a release binary for Linux winit-window
@@ -116,3 +117,19 @@ jobs:
 
       - name: Test
         run: cargo test -p aegis --no-default-features
+
+  launcher-js:
+    name: launcher js tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - name: Install + run vitest
+        working-directory: launcher
+        run: |
+          npm ci
+          npx vitest run
