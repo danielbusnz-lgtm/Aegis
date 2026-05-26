@@ -92,6 +92,67 @@ fn validate_code(code: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Proxy endpoint that read-only-validates an invite code (no device binding,
+/// no usage charged). See proxy/src/index.ts handleInviteVerify.
+const VERIFY_URL: &str = "https://aegis-proxy.danielbusnz.workers.dev/v1/invite/verify";
+
+/// Returns this install's device id, creating + persisting one if absent.
+/// Mirrors aegis/src/providers/device_id.rs so the launcher and the agent
+/// agree on the same id at `~/.config/aegis/device_id`.
+fn device_id() -> Result<String, String> {
+    let path = dirs::config_dir()
+        .ok_or("no config dir on this platform")?
+        .join("aegis")
+        .join("device_id");
+
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let trimmed = existing.trim();
+        if uuid::Uuid::parse_str(trimmed).is_ok() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create_dir_all: {e}"))?;
+    }
+    let new_id = uuid::Uuid::new_v4().to_string();
+    std::fs::write(&path, &new_id).map_err(|e| format!("write device_id: {e}"))?;
+    Ok(new_id)
+}
+
+/// Pre-flight check the onboarding UI runs when the user presses Enter on the
+/// invite field. Format-checks locally for instant feedback, then asks the
+/// proxy whether the code is real, unexpired, and has a device slot. `Ok`
+/// means usable (green); `Err(message)` carries a reason to show (red).
+#[tauri::command]
+async fn verify_invite_code(code: String) -> Result<(), String> {
+    let trimmed = code.trim();
+    validate_code(trimmed).map_err(str::to_string)?;
+
+    let device_id = device_id()?;
+    let resp = reqwest::Client::new()
+        .post(VERIFY_URL)
+        .header("x-aegis-device-id", device_id)
+        .header("x-aegis-invite-code", trimmed)
+        .send()
+        .await
+        .map_err(|_| "Couldn't reach the server. Check your connection.".to_string())?;
+
+    if resp.status().is_success() {
+        return Ok(());
+    }
+
+    // Surface the proxy's human message when present, else its error code.
+    let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+    let reason = body
+        .get("message")
+        .or_else(|| body.get("error"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("invalid invite code")
+        .to_string();
+    Err(reason)
+}
+
 /// Check if user has completed onboarding.
 fn is_onboarded() -> bool {
     dirs::config_dir()
@@ -149,7 +210,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_aegis,
             save_invite_code,
-            mark_onboarded
+            mark_onboarded,
+            verify_invite_code
         ])
         .run(tauri::generate_context!())
         .expect("error running launcher");

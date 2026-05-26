@@ -3649,10 +3649,12 @@ name = "launcher"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "uuid",
 ]
 
 [[package]]

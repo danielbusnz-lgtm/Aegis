@@ -87,14 +87,62 @@
   background: rgba(255,255,255,0.1);
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 6px;
-  padding: 8px 12px;
+  /* Symmetric horizontal padding leaves room for the status icon on the
+     right while keeping the centered text visually centered. */
+  padding: 8px 28px;
   color: #fff;
   font-size: 13px;
   width: 180px;
   text-align: center;
   outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 #invite-code::placeholder {
   color: rgba(255,255,255,0.4);
+}
+
+#invite-code.valid {
+  border-color: rgba(63,185,80,0.9);
+  box-shadow: 0 0 0 2px rgba(63,185,80,0.25);
+}
+
+#invite-code.invalid {
+  border-color: rgba(248,81,73,0.9);
+  box-shadow: 0 0 0 2px rgba(248,81,73,0.25);
+}
+
+#invite-status {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+#invite-status.valid::after {
+  content: "\2713"; /* ✓ */
+  color: #3fb950;
+}
+
+#invite-status.invalid::after {
+  content: "\2715"; /* ✕ */
+  color: #f85149;
+}
+
+#invite-status.checking::after {
+  content: "";
+  display: block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: rgba(255,255,255,0.85);
+  border-radius: 50%;
+  animation: invite-spin 0.6s linear infinite;
+}
+
+@keyframes invite-spin {
+  to { transform: rotate(360deg); }
 }
