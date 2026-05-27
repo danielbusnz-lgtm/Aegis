@@ -352,14 +352,29 @@ fn redact(text: &str, intent: Intent) -> String {
     }
 }
 
-/// Append a single line to `path`, creating the file if it doesn't exist.
-/// Returns an IO error on failure so the caller can log and swallow it.
-fn append_record(path: &Path, line: &str) -> std::io::Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    writeln!(file, "{line}")
+/// Retention cap for the opt-in log: keep at most this many of the most recent
+/// lines on disk so redacted history can't grow without bound.
+const LOG_MAX_LINES: usize = 5000;
+
+/// Append a single line to `path` (creating it if needed), then trim the file
+/// to its most recent `max_lines` lines. Returns an IO error so the caller can
+/// log and swallow it. The log is low-volume and capped, so reading it back per
+/// write is cheap, and the file is only rewritten once it grows past the cap.
+fn append_record(path: &Path, line: &str, max_lines: usize) -> std::io::Result<()> {
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        writeln!(file, "{line}")?;
+    }
+    let contents = std::fs::read_to_string(path)?;
+    let lines: Vec<&str> = contents.lines().collect();
+    if lines.len() > max_lines {
+        let tail = lines[lines.len() - max_lines..].join("\n");
+        std::fs::write(path, format!("{tail}\n"))?;
+    }
+    Ok(())
 }
 
 /// Opt-in, redacted on-device log for Stage 1 distillation data collection.
@@ -396,7 +411,7 @@ pub fn log_classification(text: &str, intent: Intent) {
         }
     };
 
-    if let Err(e) = append_record(&log_path, &record) {
+    if let Err(e) = append_record(&log_path, &record, LOG_MAX_LINES) {
         eprintln!("[routelet-log] write error ({}): {e}", log_path.display());
     }
 }
@@ -573,8 +588,8 @@ mod tests {
         let line1 = r#"{"a":1}"#;
         let line2 = r#"{"b":2}"#;
 
-        append_record(&path, line1).expect("first write should succeed");
-        append_record(&path, line2).expect("second write should succeed");
+        append_record(&path, line1, 10).expect("first write should succeed");
+        append_record(&path, line2, 10).expect("second write should succeed");
 
         let file = std::fs::File::open(&path).unwrap();
         let lines: Vec<String> = std::io::BufReader::new(file)
@@ -592,6 +607,30 @@ mod tests {
         // Both lines must parse as valid JSON.
         serde_json::from_str::<serde_json::Value>(&lines[0]).expect("line 1 must be valid JSON");
         serde_json::from_str::<serde_json::Value>(&lines[1]).expect("line 2 must be valid JSON");
+    }
+
+    // append_record: trims the file to the most recent max_lines.
+    #[test]
+    fn append_record_caps_to_max_lines() {
+        let path = std::env::temp_dir().join(format!(
+            "aegis_routelet_cap_{}.jsonl",
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        // Write 10 lines with a cap of 3; only the last 3 should remain.
+        for i in 0..10 {
+            append_record(&path, &format!(r#"{{"n":{i}}}"#), 3).expect("write should succeed");
+        }
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let lines: Vec<&str> = contents.lines().collect();
+        assert_eq!(lines.len(), 3, "file should be capped to 3 lines");
+        assert_eq!(lines, vec![r#"{"n":7}"#, r#"{"n":8}"#, r#"{"n":9}"#]);
     }
 
     // preprocess: shared fixture conformance. Every vector in
