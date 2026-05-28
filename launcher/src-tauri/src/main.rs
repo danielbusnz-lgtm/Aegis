@@ -133,7 +133,9 @@ fn resolve_routelet_dir() -> Option<std::path::PathBuf> {
     candidates.push(PathBuf::from("../../models/routelet"));
     candidates.push(PathBuf::from("models/routelet"));
 
-    candidates.into_iter().find(|p| p.join("embedder.onnx").exists())
+    candidates
+        .into_iter()
+        .find(|p| p.join("embedder.onnx").exists())
 }
 
 /// OS keychain service the launcher stores the user's own provider keys
