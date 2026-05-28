@@ -32,5 +32,13 @@ DAILY_CARTESIA_TOKEN_CAP = "100"
 binding = "USAGE_KV"
 id = "cdfd0f967d61437d8a4833b18899e343"
 
+# R2 bucket for routelet distillation samples. One JSON object per sample,
+# keyed samples/{date}/{deviceId}/{ts}-{uuid}.json. Create with:
+#   wrangler r2 bucket create aegis-routelet-samples
+# Local `wrangler dev` simulates this bucket on disk, no remote bucket needed.
+[[r2_buckets]]
+binding = "ROUTELET_R2"
+bucket_name = "aegis-routelet-samples"
+
 # Secrets (set out-of-band, never committed):
 #   wrangler secret put ANTHROPIC_API_KEY
