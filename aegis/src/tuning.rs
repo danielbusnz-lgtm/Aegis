@@ -43,6 +43,11 @@ pub const TTS_FIRST_FLUSH_MIN_CHARS: usize = 12;
 /// ↓ keeps more turns fully on-device (faster, accepts lower-confidence calls).
 pub const ROUTELET_CONFIDENCE_THRESHOLD: f32 = 0.55;
 
+/// Max distillation samples drained and POSTed in one uploader wakeup.
+/// ↑ fewer wakeups under bursty use. larger transient batch if the proxy is slow.
+/// ↓ steadier trickle of small requests. more task wakeups.
+pub const ROUTELET_UPLOAD_BATCH_MAX: usize = 32;
+
 // ────── Claude agent loop ──────
 
 /// Hard cap on agent loop iterations per turn.

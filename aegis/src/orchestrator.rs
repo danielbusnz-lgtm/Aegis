@@ -158,7 +158,13 @@ fn run_one_turn(
                     release_t.elapsed()
                 );
                 // Stage 1 data loop: opt-in redacted logging for offline distillation.
-                crate::routelet::log_classification(&transcript, routelet_intent);
+                // High-confidence turn, no Claude call, so no teacher label.
+                crate::routelet::log_classification(
+                    &transcript,
+                    Some(routelet_intent),
+                    Some(conf),
+                    None,
+                );
                 Some(routelet_intent)
             }
             low_confidence_result => {
@@ -181,9 +187,15 @@ fn run_one_turn(
                             claude_intent,
                             release_t.elapsed()
                         );
-                        // Log the Claude-chosen intent for distillation; use it as
-                        // the ground-truth label for this low-confidence turn.
-                        crate::routelet::log_classification(&transcript, claude_intent);
+                        // Log the low-confidence routelet guess alongside Claude's
+                        // label: the teacher/student pair that makes this turn the
+                        // most valuable distillation sample.
+                        crate::routelet::log_classification(
+                            &transcript,
+                            low_confidence_result.map(|(i, _)| i),
+                            low_confidence_result.map(|(_, c)| c),
+                            Some(claude_intent),
+                        );
                         Some(claude_intent)
                     }
                     Ok(None) => {

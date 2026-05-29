@@ -41,6 +41,7 @@ The app ships without API keys. By default every provider call routes through th
 | `/v1/deepgram/token` | POST | Deepgram | Mints a short-lived STT token; client opens the websocket directly |
 | `/v1/cartesia/token` | POST | Cartesia | Mints a short-lived TTS token; client connects directly |
 | `/v1/invite/verify` | POST | KV | Validates an invite code (exists, not expired, device slot free) |
+| `/v1/routelet/sample` | POST | R2 | Stores one redacted distillation sample (opt-in telemetry, no metering) |
 | `OPTIONS *` | OPTIONS | none | CORS preflight |
 
 Deepgram and Cartesia never sit on the data path: the Worker only mints a token, then the client streams to them directly. Worker secrets: `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`. Source and deploy notes: `proxy/src/index.ts` and `proxy/README.md`.

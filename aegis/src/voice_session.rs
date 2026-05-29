@@ -36,6 +36,10 @@ impl VoiceSession {
         // Claude SSE, Cartesia SSE) all run via `rt.block_on(...)`.
         let rt = tokio::runtime::Runtime::new().expect("failed to start tokio runtime");
 
+        // Start the distillation sample uploader on the runtime (no-op unless
+        // AEGIS_ROUTELET_UPLOAD=1). Reuses Claude's shared HTTP client.
+        crate::routelet::init_uploader(&rt, claude.http.clone());
+
         // Pre-open HTTPS pools to Claude, Deepgram, and Cartesia so the first
         // voice turn doesn't pay TCP+TLS handshake cost. Each warm() fires a
         // fast-failing request on this runtime; the connection stays in the
