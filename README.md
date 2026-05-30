@@ -13,9 +13,7 @@
   <a href="https://codecov.io/gh/danielbusnz-lgtm/Aegis"><img alt="Coverage" src="https://codecov.io/gh/danielbusnz-lgtm/Aegis/branch/main/graph/badge.svg"></a>
 </p>
 
-<p align="center">
-  Voice-controlled AI cursor for Linux. Hold a hotkey, say something, the cursor flies to whatever you mentioned or the right action fires.
-</p>
+
 
 <p align="center">
   <img alt="Aegis Demo" src="aegis/assets/demo.gif" width="800">
