@@ -13,7 +13,8 @@
   <a href="https://codecov.io/gh/danielbusnz-lgtm/Aegis"><img alt="Coverage" src="https://codecov.io/gh/danielbusnz-lgtm/Aegis/branch/main/graph/badge.svg"></a>
 </p>
 
-
+<p align="center">
+    hold the hotkey. Ask a Question. Cursor handles the rest.
 
 <p align="center">
   <img alt="Aegis Demo" src="aegis/assets/demo.gif" width="800">
